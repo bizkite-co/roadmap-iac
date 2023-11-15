@@ -10,11 +10,11 @@ def get_target_ec2_instances(ec2_client):
         Example: [{"instance_id": "abcdefg1234567890", "instance_name": "demo-instance"}]
     """
 
-    responce = ec2_client.describe_instances(
+    response = ec2_client.describe_instances(
         Filters=[{'Name': 'tag:AutoStartStop', "Values": ['TRUE']}])
 
     target_instances = []
-    for reservation in responce['Reservations']:
+    for reservation in response['Reservations']:
         if 'Instances' in reservation.keys() and len(reservation['Instances']) > 0:
             for instance in reservation['Instances']:
                 if instance['State']['Name'] == 'running' or instance['State']['Name'] == 'stopped':
@@ -75,7 +75,7 @@ def stop_instance(ec2_client, instance):
         return False
 
 
-def return_responce(status_code, message):
+def return_response(status_code, message):
     # type: (int, str) -> dict
     return {
         'statusCode': status_code,
@@ -91,7 +91,7 @@ def main(event, context):
         if action not in ['start', 'stop']:
             message = 'Invalid action. "action" support "start" or "stop".'
             print(message)
-            return_responce(400, message)
+            return_response(400, message)
 
         client = boto3.client('ec2', region)
         target_instances = get_target_ec2_instances(client)
@@ -100,7 +100,7 @@ def main(event, context):
             message = 'There are no instances subject to automatic {}.'.format(
                 action)
             print(message)
-            return_responce(200, message)
+            return_response(200, message)
 
         for instance in target_instances:
             start_stop_instance(client, instance, action)
