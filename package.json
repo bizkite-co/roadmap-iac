@@ -7,14 +7,23 @@
   "scripts": {
     "build": "tsc",
     "watch": "tsc -w",
-    "cdk": "cdk"
+    "cdk": "cdk",
+    "deploy": "CREATED_AT=$(date) && echo \"CREATED_AT: $CREATED_AT\" | tee docs/cdk-deployment.log && cdk deploy --all --require-approval never  | tee -a docs/cdk-deployment.log",
+    "synth": "cdk synth --all > docs/cdk-outputs.json",
+    "test:cron": "./scripts/validate-cron.sh",
+    "e2e:test-local": "BASE_URL=https://roadmapparters.net/roadmap LOGIN_PATH=/login.html WELCOME_PATH=/prsWelcome.html CLIENT_PROFILE_PATH=/clientProfile.html COLLEGE_PLANNER_PATH=/collegePlanner.html npx playwright test e2e/login.test.ts"
   },
   "devDependencies": {
+    "@types/jest": "^29.5.14",
     "@types/node": "14.14.37",
+    "jest": "^29.7.0",
+    "playwright": "^1.52.0",
     "ts-node": "^9.1.1",
     "typescript": "^4.2.3"
   },
   "dependencies": {
+    "@aws-sdk/client-s3": "^3.802.0",
+    "@playwright/test": "^1.52.0",
     "aws-cdk-lib": "^2.194.0",
     "constructs": "^10.4.2",
     "source-map-support": "^0.5.19"
