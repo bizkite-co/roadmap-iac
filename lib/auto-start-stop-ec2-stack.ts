@@ -1,19 +1,20 @@
-import events = require('@aws-cdk/aws-events');
-import iam = require('@aws-cdk/aws-iam');
-import lambda = require('@aws-cdk/aws-lambda');
-import targets = require('@aws-cdk/aws-events-targets');
-import cdk = require('@aws-cdk/core');
+import * as events from 'aws-cdk-lib/aws-events';
+import * as iam from 'aws-cdk-lib/aws-iam';
+import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as targets from 'aws-cdk-lib/aws-events-targets';
+import * as cdk from 'aws-cdk-lib';
+import { Construct } from 'constructs';
 
 import fs = require('fs');
 
 export class AutoStartStopEc2Stack extends cdk.Stack {
-  constructor (app: cdk.App, id: string) {
-    super(app, id);
+  constructor (scope: Construct, id: string, props?: cdk.StackProps) {
+    super(scope, id, props);
 
-    const stackConfig = JSON.parse(fs.readFileSync('stack.config.json', {encoding: 'utf-8'}));
+    const stackConfig = JSON.parse(fs.readFileSync('stack.config.json', {encoding: 'utf-8'})).uat;
 
     const lambdaFn = new lambda.Function(this, 'singleton', {
-      code: new lambda.InlineCode(fs.readFileSync('lambda/auto-start-stop-ec2.py', {encoding: 'utf-8'})),
+      code: lambda.Code.fromInline(fs.readFileSync('lambda/auto-start-stop-ec2.py', {encoding: 'utf-8'})),
       handler: 'index.main',
       timeout: cdk.Duration.seconds(300),
       runtime: lambda.Runtime.PYTHON_3_7,
@@ -30,20 +31,20 @@ export class AutoStartStopEc2Stack extends cdk.Stack {
 
     // STOP EC2 instances rule
     const stopRule = new events.Rule(this, 'StopRule', {
-      schedule: events.Schedule.expression(`cron(${stackConfig.events.cron.stop})`)
+      schedule: events.Schedule.expression(stackConfig.autoStopSchedule)
     });
 
     stopRule.addTarget(new targets.LambdaFunction(lambdaFn, {
-      event: events.RuleTargetInput.fromObject({Region: stackConfig.targets.ec2region, Action: 'stop'})
+      event: events.RuleTargetInput.fromObject({Region: stackConfig.region, Action: 'stop'})
     }));
 
     // START EC2 instances rule
     const startRule = new events.Rule(this, 'StartRule', {
-      schedule: events.Schedule.expression(`cron(${stackConfig.events.cron.start})`)
+      schedule: events.Schedule.expression('rate(5 minutes)')
     });
 
     startRule.addTarget(new targets.LambdaFunction(lambdaFn, {
-      event: events.RuleTargetInput.fromObject({Region: stackConfig.targets.ec2region, Action: 'start'})
+      event: events.RuleTargetInput.fromObject({Region: stackConfig.region, Action: 'start'})
     }));
   }
 }
