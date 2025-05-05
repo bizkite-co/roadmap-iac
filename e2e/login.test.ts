@@ -5,33 +5,49 @@ import * as fs from 'fs';
 const bucketName = 'higginbotham-prs-logs';
 const bucketPath = 'test-snapshots';
 
-const s3Client = new S3Client({ region: 'us-west-2' }); // Replace with your region
+const config = require('../stack.config.json').prod; // Load the configuration
+
+const s3Client = new S3Client({ region: config.region }); // Replace with your region
 
 test('Login E2E Test', async ({ page }) => {
-  const baseUrl = process.env.BASE_URL || '';
-  const loginPath = process.env.LOGIN_PATH || '';
-  const welcomePath = process.env.WELCOME_PATH || '';
-  const clientProfilePath = process.env.CLIENT_PROFILE_PATH || '';
-  const collegePlannerPath = process.env.COLLEGE_PLANNER_PATH || '';
+  const baseUrl = config.baseUrl || '';
+  const loginPath = config.loginPath || '';
+  const welcomePath = config.welcomePath || '';
+  const clientProfilePath = config.clientProfilePath || '';
+  const collegePlannerPath = config.collegePlannerPath || '';
 
   // 1. Go to login page
-  await page.goto(`${baseUrl}${loginPath}`);
+  const loginUrl = `${baseUrl}${loginPath}`;
+  try {
+    await page.goto(loginUrl);
+  } catch (error: any) {
+    console.error(`Navigation to ${loginUrl} failed: ${error.message}`);
+    throw new Error(`Failed to navigate to ${loginUrl}: ${error.message}`);
+  }
 
   // 2. Fill in username and password
   await page.locator('input[name="username"]').fill(process.env.ROADMAP_USERNAME || '');
   await page.locator('input[name="password"]').fill(process.env.ROADMAP_PASSWORD || '');
 
   // 3. Click login button
-  await page.locator('button[type="submit"]').click();
+  await page.locator('input[type="submit"].darkblue.largebtn.xllogin').click();
 
   // 4. Assert successful login
-  await expect(page).toHaveURL(`${baseUrl}${welcomePath}`);
+  const welcomeUrl = `${baseUrl}${welcomePath}`;
+  try {
+    await expect(page).toHaveURL(welcomeUrl);
+  } catch (error) {
+    console.error(`Login failed. Expected URL: ${welcomeUrl}, Actual URL: ${page.url()}`);
+    throw error;
+  }
 
   // 5. Navigate to Profile page
-  await page.goto(`${baseUrl}${clientProfilePath}`);
+  const clientProfileUrl = `${baseUrl}${clientProfilePath}`;
+  await page.goto(clientProfileUrl);
 
   // 6. Navigate to Settings page
-  await page.goto(`${baseUrl}${collegePlannerPath}`);
+  const collegePlannerUrl = `${baseUrl}${collegePlannerPath}`;
+  await page.goto(collegePlannerUrl);
 
   // Take screenshot
   const screenshot = await page.screenshot();

@@ -11,7 +11,7 @@
     "deploy": "CREATED_AT=$(date) && echo \"CREATED_AT: $CREATED_AT\" | tee docs/cdk-deployment.log && cdk deploy --all --require-approval never  | tee -a docs/cdk-deployment.log",
     "synth": "cdk synth --all > docs/cdk-outputs.json",
     "test:cron": "./scripts/validate-cron.sh",
-    "e2e:test-local": "BASE_URL=https://roadmapparters.net/roadmap LOGIN_PATH=/login.html WELCOME_PATH=/prsWelcome.html CLIENT_PROFILE_PATH=/clientProfile.html COLLEGE_PLANNER_PATH=/collegePlanner.html npx playwright test e2e/login.test.ts"
+    "e2e:test-local": "npx playwright test e2e/login.test.ts"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",
