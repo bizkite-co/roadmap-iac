@@ -33,14 +33,27 @@ export class AutoStartStopEc2Stack extends cdk.Stack {
       resources: ['*']
     }));
 
-    // STOP EC2 instances rule
-    const stopRule = new events.Rule(this, 'StopRule', {
-      schedule: events.Schedule.expression(uatConfig.autoStopSchedule)
-    });
+    // STOP EC2 instances rule for UAT
+    if (uatConfig.autoStopSchedule) {
+      const stopRuleUat = new events.Rule(this, 'StopRuleUat', {
+        schedule: events.Schedule.expression(uatConfig.autoStopSchedule)
+      });
 
-    stopRule.addTarget(new targets.LambdaFunction(lambdaFn, {
-      event: events.RuleTargetInput.fromObject({Region: uatConfig.region, Action: 'stop'})
-    }));
+      stopRuleUat.addTarget(new targets.LambdaFunction(lambdaFn, {
+        event: events.RuleTargetInput.fromObject({Region: uatConfig.region, Action: 'stop'})
+      }));
+    }
+
+    // STOP EC2 instances rule for PROD
+    if (prodConfig.autoStopSchedule) {
+      const stopRuleProd = new events.Rule(this, 'StopRuleProd', {
+        schedule: events.Schedule.expression(prodConfig.autoStopSchedule)
+      });
+
+      stopRuleProd.addTarget(new targets.LambdaFunction(lambdaFn, {
+        event: events.RuleTargetInput.fromObject({Region: prodConfig.region, Action: 'stop'})
+      }));
+    }
 
     // START EC2 instances rule
     const startRule = new events.Rule(this, 'StartRule', {
@@ -96,11 +109,6 @@ export class AutoStartStopEc2Stack extends cdk.Stack {
     new cdk.CfnOutput(this, 'SnsTopicArn', {
       value: snsTopicArn,
       description: 'The ARN of the SNS topic that receives failure notifications.'
-    });
-
-    new cdk.CfnOutput(this, 'StopRuleName', {
-      value: stopRule.ruleName,
-      description: 'The name of the CloudWatch Event Rule that stops the EC2 instances.'
     });
 
     new cdk.CfnOutput(this, 'StartRuleName', {
