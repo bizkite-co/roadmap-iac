@@ -22,6 +22,9 @@ export class AutoStartStopEc2Stack extends cdk.Stack {
       handler: 'index.main',
       timeout: cdk.Duration.seconds(300),
       runtime: lambda.Runtime.PYTHON_3_9,
+      environment: {
+        SNS_TOPIC_ARN: snsTopicArn
+      }
     });
 
     lambdaFn.addToRolePolicy(new iam.PolicyStatement({
@@ -34,35 +37,26 @@ export class AutoStartStopEc2Stack extends cdk.Stack {
     }));
 
     // STOP EC2 instances rule for UAT
-    if (uatConfig.autoStopSchedule) {
-      const stopRuleUat = new events.Rule(this, 'StopRuleUat', {
-        schedule: events.Schedule.expression(uatConfig.autoStopSchedule)
-      });
-
-      stopRuleUat.addTarget(new targets.LambdaFunction(lambdaFn, {
-        event: events.RuleTargetInput.fromObject({Region: uatConfig.region, Action: 'stop'})
-      }));
-    }
-
-    // STOP EC2 instances rule for PROD
-    if (prodConfig.autoStopSchedule) {
-      const stopRuleProd = new events.Rule(this, 'StopRuleProd', {
-        schedule: events.Schedule.expression(prodConfig.autoStopSchedule)
-      });
-
-      stopRuleProd.addTarget(new targets.LambdaFunction(lambdaFn, {
-        event: events.RuleTargetInput.fromObject({Region: prodConfig.region, Action: 'stop'})
-      }));
-    }
-
-    // START EC2 instances rule
-    const startRule = new events.Rule(this, 'StartRule', {
-      schedule: events.Schedule.expression('rate(5 minutes)')
+    const stopRuleUat = new events.Rule(this, 'StopRuleUat', {
+      ruleName: `${id}-StopRuleUat`,
+      schedule: events.Schedule.expression(uatConfig.autoStopSchedule)
     });
 
-    startRule.addTarget(new targets.LambdaFunction(lambdaFn, {
-      event: events.RuleTargetInput.fromObject({Region: uatConfig.region, Action: 'start'})
+    stopRuleUat.addTarget(new targets.LambdaFunction(lambdaFn, {
+      event: events.RuleTargetInput.fromObject({Region: uatConfig.region, Action: 'stop'})
     }));
+
+    // STOP/START EC2 instances rule for PROD (Friday night for AWS maintenance)
+    if (prodConfig.autoStopStartSchedule) {
+      const stopStartRuleProd = new events.Rule(this, 'StopStartRuleProd', {
+        ruleName: `${id}-StopStartRuleProd`,
+        schedule: events.Schedule.expression(prodConfig.autoStopStartSchedule)
+      });
+
+      stopStartRuleProd.addTarget(new targets.LambdaFunction(lambdaFn, {
+        event: events.RuleTargetInput.fromObject({Region: prodConfig.region, Action: 'stopstart'})
+      }));
+    }
 
     // E2E Test Lambda Function
     const e2eTestLambda = new lambda.Function(this, 'e2eTestLambda', {
@@ -88,6 +82,7 @@ export class AutoStartStopEc2Stack extends cdk.Stack {
     const e2eTestRules: events.Rule[] = [];
     prodConfig.e2eTestSchedule.forEach((schedule: string, index: number) => {
       const e2eTestRule = new events.Rule(this, `e2eTestRule${index}`, {
+        ruleName: `${id}-e2eTestRule${index}`,
         schedule: events.Schedule.expression(schedule),
       });
 
@@ -109,11 +104,6 @@ export class AutoStartStopEc2Stack extends cdk.Stack {
     new cdk.CfnOutput(this, 'SnsTopicArn', {
       value: snsTopicArn,
       description: 'The ARN of the SNS topic that receives failure notifications.'
-    });
-
-    new cdk.CfnOutput(this, 'StartRuleName', {
-      value: startRule.ruleName,
-      description: 'The name of the CloudWatch Event Rule that starts the EC2 instances.'
     });
 
     e2eTestRules.forEach((rule: events.Rule, index: number) => {

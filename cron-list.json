@@ -1,0 +1,154 @@
+{
+    "Name": "AutoStartStopEc2Stack-StopRule00306666-bcQwhizGP4qV",
+    "Arn": "arn:aws:events:us-east-1:318364255844:rule/AutoStartStopEc2Stack-StopRule00306666-bcQwhizGP4qV",
+    "ScheduleExpression": "cron(0 2 * * ? *)",
+    "State": "ENABLED",
+    "EventBusName": "default",
+    "CreatedBy": "318364255844"
+}
+{
+    "Targets": [
+        {
+            "Id": "Target0",
+            "Arn": "arn:aws:lambda:us-east-1:318364255844:function:AutoStartStopEc2Stack-singleton69FEA30F-N75MhmE4grZK",
+            "Input": "{\"Region\":\"us-west-1\",\"Action\":\"stop\"}"
+        }
+    ]
+}
+{
+    "Name": "AutoStartStopEc2Stack-e2eTestRule0EDBA3FB9-uTQ1strDAkk3",
+    "Arn": "arn:aws:events:us-east-1:318364255844:rule/AutoStartStopEc2Stack-e2eTestRule0EDBA3FB9-uTQ1strDAkk3",
+    "ScheduleExpression": "cron(0 13 ? * MON-FRI *)",
+    "State": "ENABLED",
+    "EventBusName": "default",
+    "CreatedBy": "318364255844"
+}
+{
+    "Targets": [
+        {
+            "Id": "Target0",
+            "Arn": "arn:aws:lambda:us-east-1:318364255844:function:AutoStartStopEc2Stack-e2eTestLambdaABF52E70-MdmARD7ib5yp"
+        }
+    ]
+}
+{
+    "Name": "AutoStartStopEc2Stack-e2eTestRule1B9F6E07B-hscuQXOhrv9G",
+    "Arn": "arn:aws:events:us-east-1:318364255844:rule/AutoStartStopEc2Stack-e2eTestRule1B9F6E07B-hscuQXOhrv9G",
+    "ScheduleExpression": "cron(0 20 ? * MON-FRI *)",
+    "State": "ENABLED",
+    "EventBusName": "default",
+    "CreatedBy": "318364255844"
+}
+{
+    "Targets": [
+        {
+            "Id": "Target0",
+            "Arn": "arn:aws:lambda:us-east-1:318364255844:function:AutoStartStopEc2Stack-e2eTestLambdaABF52E70-MdmARD7ib5yp"
+        }
+    ]
+}
+{
+    "Name": "ManagedRuleForCfnGitSync",
+    "Arn": "arn:aws:events:us-east-1:318364255844:rule/ManagedRuleForCfnGitSync",
+    "EventPattern": "{\"source\": [\"aws.cloudformation\"], \"detail-type\": [\"CloudFormation Stack Status Change\"]}",
+    "State": "ENABLED",
+    "Description": "Allows opted in CloudFormation stacks to be synchronized from Git.",
+    "ManagedBy": "cloudformation.sync.codeconnections.amazonaws.com",
+    "EventBusName": "default",
+    "CreatedBy": "318364255844"
+}
+{
+    "Targets": [
+        {
+            "Id": "1e3cbcd4-97dd-4d88-9cd7-96d6a36ac332",
+            "Arn": "arn:aws:cloudformationgitsync:us-east-1:::"
+        }
+    ]
+}
+{
+    "Name": "SocialWorkerStack-ScraperSchedule2D3F5A4C-3Fr6Bb4nRzvu",
+    "Arn": "arn:aws:events:us-east-1:318364255844:rule/SocialWorkerStack-ScraperSchedule2D3F5A4C-3Fr6Bb4nRzvu",
+    "ScheduleExpression": "cron(0 0 * * ? *)",
+    "State": "ENABLED",
+    "EventBusName": "default",
+    "CreatedBy": "318364255844"
+}
+{
+    "Targets": [
+        {
+            "Id": "Target0",
+            "Arn": "arn:aws:lambda:us-east-1:318364255844:function:SocialWorkerStack-ScraperFunction9503A55F-DdrBnsc0DOSz"
+        }
+    ]
+}
+{
+    "Name": "StepFunctionsGetEventsForECSTaskRule",
+    "Arn": "arn:aws:events:us-east-1:318364255844:rule/StepFunctionsGetEventsForECSTaskRule",
+    "EventPattern": "{\n  \"source\": [\n    \"aws.ecs\"\n  ],\n  \"detail-type\": [\n    \"ECS Task State Change\"\n  ],\n  \"detail\": {\n    \"lastStatus\": [\n      \"STOPPED\"\n    ],\n    \"desiredStatus\": [\n      \"STOPPED\"\n    ],\n    \"startedBy\": [\n      \"AWS Step Functions\"\n    ]\n  }\n}\n",
+    "State": "ENABLED",
+    "Description": "This rule is used to notify Step Functions regarding AWS ECS Tasks",
+    "ManagedBy": "states.amazonaws.com",
+    "EventBusName": "default",
+    "CreatedBy": "318364255844"
+}
+{
+    "Targets": [
+        {
+            "Id": "StepFunctionsGetEventsForECSTaskRule-Id",
+            "Arn": "arn:aws:states:us-east-1:::"
+        }
+    ]
+}
+{
+    "Name": "TestS3EventBridgeRule",
+    "Arn": "arn:aws:events:us-east-1:318364255844:rule/TestS3EventBridgeRule",
+    "EventPattern": "{\"source\":[\"aws.s3\"],\"detail\":{\"bucket\":{\"name\":[\"test-eventbridge-integration-bucket-12345\"]}}}",
+    "State": "ENABLED",
+    "EventBusName": "default",
+    "CreatedBy": "318364255844"
+}
+{
+    "Targets": [
+        {
+            "Id": "CloudWatchLogsTarget",
+            "Arn": "arn:aws:logs:us-east-1:318364255844:log-group:/aws/events/S3EventBridgeDebug"
+        }
+    ]
+}
+{
+    "Name": "TurboWebhookStack-S3ShopifyOrderPutRule875D19F5-SrOFG9OaCRNo",
+    "Arn": "arn:aws:events:us-east-1:318364255844:rule/TurboWebhookStack-S3ShopifyOrderPutRule875D19F5-SrOFG9OaCRNo",
+    "EventPattern": "{\"source\":[\"aws.s3\"]}",
+    "State": "ENABLED",
+    "EventBusName": "default",
+    "CreatedBy": "318364255844"
+}
+{
+    "Targets": [
+        {
+            "Id": "CloudWatchLogsTarget",
+            "Arn": "arn:aws:logs:us-east-1:318364255844:log-group:/aws/events/S3EventBridgeDebug"
+        },
+        {
+            "Id": "Target0",
+            "Arn": "arn:aws:lambda:us-east-1:318364255844:function:TurboWebhookStack-StartExecutionStartExecutionLamb-U70BzVX007Rw"
+        }
+    ]
+}
+{
+    "Name": "test-rule",
+    "Arn": "arn:aws:events:us-east-1:318364255844:rule/test-rule",
+    "EventPattern": "{\"source\":[\"aws.apigateway\"]}",
+    "State": "ENABLED",
+    "Description": "delete at will",
+    "EventBusName": "default",
+    "CreatedBy": "318364255844"
+}
+{
+    "Targets": [
+        {
+            "Id": "Idb34a0580-0d1a-4cac-9c0b-3bfa1013e7a6",
+            "Arn": "arn:aws:sns:us-east-1:318364255844:MyBudget"
+        }
+    ]
+}

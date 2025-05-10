@@ -15,3 +15,8 @@ Improve the E2E test failure messages to output the value of the path being test
 *   Configured the PRS account to publish to the `site-down` topic in your Bizkite account.
 *   Updated the `cdk.json` file with the `snsTopicArn` context value.
 *   Deployed the CDK stack successfully.
+*   Corrected the `logback.xml` file to fix the Tomcat startup issue.
+*   Removed the incorrect `autoStopSchedule` setting from the `prod` configuration in `stack.config.json`.
+*   Modified the `lib/auto-start-stop-ec2-stack.ts` file to prevent the creation of the 5-minute start rule and add a new rule that stops and starts the PROD server based on the `prodConfig.autoStopStartSchedule`.
+*   Deployed the CDK stack to apply the changes.
+*   Added the stack region and account number to the `docs/cdk-outputs.yml` file.

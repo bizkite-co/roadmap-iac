@@ -9,9 +9,10 @@
     "watch": "tsc -w",
     "cdk": "cdk",
     "deploy": "CREATED_AT=$(date) && echo \"CREATED_AT: $CREATED_AT\" | tee docs/cdk-deployment.log && cdk deploy --all --require-approval never  | tee -a docs/cdk-deployment.log",
-    "synth": "cdk synth --all > docs/cdk-outputs.json",
+    "synth": "cdk synth --all > docs/cdk-outputs.yml",
     "test:cron": "./scripts/validate-cron.sh",
-    "e2e:test-local": "npx playwright test e2e/login.test.ts"
+    "e2e:test-local": "npx playwright test e2e/login.test.ts",
+    "list:cron": "./scripts/list-cron.sh | tee cron-list.json"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",

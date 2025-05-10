@@ -1,5 +1,6 @@
 import boto3
 import traceback
+import time
 
 
 def get_target_ec2_instances(ec2_client):
@@ -44,6 +45,10 @@ def start_stop_instance(ec2_client, instance, action):
         return start_instance(ec2_client, instance)
     elif action == "stop":
         return stop_instance(ec2_client, instance)
+    elif action == "stopstart":
+        stop_instance(ec2_client, instance)
+        time.sleep(300)
+        return start_instance(ec2_client, instance)
     else:
         print("Invalid action.")
         return False
@@ -77,7 +82,7 @@ def stop_instance(ec2_client, instance):
             )
         )
 
-        res = ec2_client.terminate_instances(InstanceIds=[instance["instance_id"]])
+        res = ec2_client.stop_instances(InstanceIds=[instance["instance_id"]])
         print(res)
 
         return True
@@ -98,8 +103,8 @@ def main(event, context):
         region = event["Region"]
         action = event["Action"]
 
-        if action not in ["start", "stop"]:
-            message = 'Invalid action. "action" support "start" or "stop".'
+        if action not in ["start", "stop", "stopstart"]:
+            message = 'Invalid action. "action" support "start", "stop", or "stopstart".'
             print(message)
             return_response(400, message)
 
