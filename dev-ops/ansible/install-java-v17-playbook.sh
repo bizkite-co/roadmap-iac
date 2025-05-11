@@ -1,0 +1,1 @@
+ansible-playbook -u ubuntu -i /etc/ansible/hosts -l PROD, ./ansible/install-java-v17-playbook.yml

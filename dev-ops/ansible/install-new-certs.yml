@@ -1,0 +1,23 @@
+---
+- name: Copy cert files to remote servers
+  hosts: UAT
+  become: yes
+  user: ubuntu
+  tasks:
+    - name: Copy RetirementTaxAnalyzer cert files
+      copy:
+        src: "/mnt/c/clients/prs/prs-wiki/dev-ops/certs/retirementtaxanalyzer.com/*.crt"
+        dest: "/etc/ssl/certs/retirementtaxanalyzer.crt"
+        force: yes
+        owner: root
+        group: root
+        mode: '0644'
+    - name: Copy RoadmapPartners cert files
+      copy:
+        src: "/mnt/c/clients/prs/prs-wiki/dev-ops/certs/_.roadmappartners.net/*.crt"
+        dest: "/etc/ssl/certs/roadmapparterns.net.crt"
+        force: yes
+        owner: root
+        group: root
+        mode: '0644'
+

@@ -1,0 +1,94 @@
+Certificate:
+    Data:
+        Version: 3 (0x2)
+        Serial Number:
+            03:ca:06:0b:7b:1d:f5:8b:f8:fc:e9:11:2f:15:e2:6e:7b:b4
+        Signature Algorithm: sha256WithRSAEncryption
+        Issuer: C = US, O = Let's Encrypt, CN = R3
+        Validity
+            Not Before: Apr 12 23:55:22 2024 GMT
+            Not After : Jul 11 23:55:21 2024 GMT
+        Subject: CN = gnupg.org
+        Subject Public Key Info:
+            Public Key Algorithm: rsaEncryption
+                Public-Key: (2048 bit)
+                Modulus:
+                    00:e0:ce:7a:41:6b:0e:ed:75:2a:11:0e:2e:af:01:
+                    5e:92:d9:45:4a:57:93:51:db:00:5b:45:9e:5f:48:
+                    35:8a:44:d0:ac:5e:2a:62:e0:c2:0b:10:bf:67:86:
+                    59:a6:8e:d6:1d:4f:16:b2:d4:8d:86:55:9b:98:74:
+                    3c:a2:8e:9b:d1:d6:34:d9:fa:20:6d:d7:55:4f:75:
+                    29:03:27:a6:eb:cb:4c:6c:1d:4e:69:6e:27:fd:be:
+                    68:a8:6d:08:93:3d:81:5e:5e:1c:3e:e3:88:cf:0d:
+                    44:d1:4e:db:0e:db:b9:a0:7d:2a:83:9f:7e:09:ed:
+                    b5:c2:3f:6d:21:23:7d:c2:16:06:a5:5e:34:5d:07:
+                    7f:0d:aa:ef:50:18:a1:d4:07:09:09:f2:17:53:15:
+                    f4:10:43:ab:fa:55:7e:36:1a:fd:b4:0e:d1:3d:cb:
+                    53:e0:d9:48:77:ec:c1:5a:74:0d:50:10:02:44:7b:
+                    2d:11:62:44:97:51:fa:c7:11:23:b5:27:49:e9:48:
+                    8e:fb:d2:c1:7e:41:1f:a0:6d:82:7f:d7:66:3a:07:
+                    4e:4b:87:6e:cd:5c:b5:e2:17:ed:9b:aa:4e:77:2a:
+                    ad:2a:01:ee:6b:9f:36:15:e4:e5:72:1b:7e:39:bc:
+                    1b:c7:ca:0b:52:d0:51:bc:76:39:f8:4d:c5:f0:bf:
+                    e1:a9
+                Exponent: 65537 (0x10001)
+        X509v3 extensions:
+            X509v3 Key Usage: critical
+                Digital Signature, Key Encipherment
+            X509v3 Extended Key Usage: 
+                TLS Web Server Authentication, TLS Web Client Authentication
+            X509v3 Basic Constraints: critical
+                CA:FALSE
+            X509v3 Subject Key Identifier: 
+                1A:49:5A:7D:0B:88:93:64:8E:18:DE:56:D3:FD:99:F4:95:B7:11:59
+            X509v3 Authority Key Identifier: 
+                14:2E:B3:17:B7:58:56:CB:AE:50:09:40:E6:1F:AF:9D:8B:14:C2:C6
+            Authority Information Access: 
+                OCSP - URI:http://r3.o.lencr.org
+                CA Issuers - URI:http://r3.i.lencr.org/
+            X509v3 Subject Alternative Name: 
+                DNS:gnupg.org, DNS:www.gnupg.org
+            X509v3 Certificate Policies: 
+                Policy: 2.23.140.1.2.1
+            CT Precertificate SCTs: 
+                Signed Certificate Timestamp:
+                    Version   : v1 (0x0)
+                    Log ID    : 48:B0:E3:6B:DA:A6:47:34:0F:E5:6A:02:FA:9D:30:EB:
+                                1C:52:01:CB:56:DD:2C:81:D9:BB:BF:AB:39:D8:84:73
+                    Timestamp : Apr 13 00:55:22.849 2024 GMT
+                    Extensions: none
+                    Signature : ecdsa-with-SHA256
+                                30:46:02:21:00:CA:7B:9C:34:A1:F0:0E:B8:B4:3F:F7:
+                                40:FC:F4:1F:60:DE:2C:D9:BE:74:25:02:C7:87:0D:3E:
+                                7D:01:77:E7:8A:02:21:00:94:A1:D2:75:B8:AF:15:8B:
+                                1B:60:3B:69:F9:BD:C6:20:22:CC:DB:51:71:F2:80:56:
+                                5B:7B:4E:32:2D:02:67:6A
+                Signed Certificate Timestamp:
+                    Version   : v1 (0x0)
+                    Log ID    : EE:CD:D0:64:D5:DB:1A:CE:C5:5C:B7:9D:B4:CD:13:A2:
+                                32:87:46:7C:BC:EC:DE:C3:51:48:59:46:71:1F:B5:9B
+                    Timestamp : Apr 13 00:55:22.816 2024 GMT
+                    Extensions: none
+                    Signature : ecdsa-with-SHA256
+                                30:45:02:20:6E:39:39:AC:1A:7F:F1:7C:0D:8C:C9:4C:
+                                9F:72:AB:41:F0:0A:1C:CD:17:59:51:16:14:AC:D2:11:
+                                43:20:6D:A0:02:21:00:FC:20:5B:E3:5A:8D:38:45:21:
+                                5F:38:94:7B:86:1E:99:99:74:89:BA:C4:0C:88:96:1A:
+                                20:33:72:7F:61:F8:3B
+    Signature Algorithm: sha256WithRSAEncryption
+    Signature Value:
+        30:ea:35:b3:b4:40:95:43:a7:80:08:8c:18:07:c8:90:cb:89:
+        a0:46:e7:d4:51:df:57:c0:12:a1:cc:31:ee:3b:a1:5b:4e:83:
+        e8:04:a2:c2:33:50:22:c3:cd:19:32:80:e0:59:58:b3:60:f3:
+        30:7f:75:7e:0c:57:94:11:4b:05:af:42:fe:65:da:25:14:aa:
+        06:9f:86:3b:2a:05:a0:e8:17:75:44:b3:f0:1e:94:6a:d6:fd:
+        08:4d:e3:00:3b:d8:30:8f:48:14:c8:83:a2:fd:fc:57:b9:b3:
+        11:a3:11:14:44:1a:a3:ee:fb:16:3a:ef:23:e3:02:97:a6:cb:
+        b8:96:a3:eb:9a:38:1b:58:20:4a:b3:f9:76:67:a7:78:8c:a0:
+        4f:1e:5e:56:05:c3:f2:94:82:2d:14:ae:0b:af:3e:4b:7a:60:
+        cb:7f:8a:e3:5b:ba:84:24:c3:7e:b2:2f:54:aa:47:ce:7c:fa:
+        7f:0b:4f:b9:9d:00:0b:7b:71:6f:5b:eb:3d:c3:7f:67:87:db:
+        e0:b4:bb:32:f4:a9:f3:2b:d9:78:95:1c:d1:9e:a5:d5:72:1b:
+        bc:b3:f4:c2:29:f6:15:fb:07:af:d6:d9:22:20:17:fa:82:1c:
+        a7:be:9f:0d:00:19:a6:f5:f6:73:fa:fd:45:d0:98:da:5c:f0:
+        36:ed:0f:2e

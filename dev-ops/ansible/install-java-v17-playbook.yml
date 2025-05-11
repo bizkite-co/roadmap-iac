@@ -1,0 +1,51 @@
+---
+- hosts: all
+  become: yes
+  tasks:
+    - name: Import the GPG key
+      apt_key:
+        url: "https://adoptium.jfrog.io/artifactory/api/gpg/key/public"
+        state: present
+
+    - name: Add the Adoptium repository
+      apt_repository:
+        repo: "deb https://adoptium.jfrog.io/artifactory/deb {{ ansible_distribution_release }} main"
+        state: present
+
+    - name: Install Temurin 17
+      apt:
+        name: temurin-17-jdk
+        state: present
+        update_cache: yes
+
+    - name: Set Temurin 17 as default Java
+      command: update-alternatives --set java /usr/lib/jvm/temurin-17-jdk-amd64/bin/java
+
+    - name: Update JAVA_HOME in setenv.sh
+      lineinfile:
+        path: /opt/tomcat/apache-tomcat-9.0.53/bin/setenv.sh
+        regexp: '^export JAVA_HOME='
+        line: 'export JAVA_HOME=/usr/lib/jvm/temurin-17-jdk-amd64/'
+
+    - name: Check Java version
+      command: java -version
+      register: java_version
+      changed_when: false
+
+    - name: Print Java version
+      debug:
+        msg: "{{ java_version.stderr_lines }}"
+
+    - name: Check setenv.sh contents
+      command: cat /opt/tomcat/apache-tomcat-9.0.53/bin/setenv.sh
+      register: setenv_contents
+      changed_when: false
+
+    - name: Print setenv.sh contents
+      debug:
+        msg: "{{ setenv_contents.stdout_lines }}"
+
+    - name: Restart Tomcat
+      service:
+        name: tomcat
+        state: restarted

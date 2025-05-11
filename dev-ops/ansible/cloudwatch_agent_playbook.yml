@@ -1,0 +1,54 @@
+---
+- name: Configure CloudWatch Agent
+  hosts: all
+  become: yes
+
+  tasks:
+    # This task needs refinement based on actual installation method and distribution.
+    # For Debian/Ubuntu, download the .deb package and install using apt.
+    # For Amazon Linux/CentOS/RHEL, download the .rpm package and install using yum
+
+    - name: Download CloudWatch agent package (for Debian/Ubuntu)
+      get_url:
+        url: https://s3.amazonaws.com/amazoncloudwatch-agent/ubuntu/amd64/latest/amazon-cloudwatch-agent.deb
+        dest: /tmp/amazon-cloudwatch-agent.deb
+      when: ansible_facts['pkg_mgr'] == 'apt'
+
+    - name: Install CloudWatch agent package (for Debian/Ubuntu)
+      apt:
+        deb: /tmp/amazon-cloudwatch-agent.deb
+        state: present
+      when: ansible_facts['pkg_mgr'] == 'apt'
+
+    # Add tasks for yum/dnf based systems if needed, similar to the apt tasks above.
+    # Example for yum:
+    # - name: Download CloudWatch agent package (for RedHat/CentOS/Amazon Linux)
+    #   get_url:
+    #     url: https://s3.amazonaws.com/amazoncloudwatch-agent/amazon_linux/amd64/latest/amazon-cloudwatch-agent.rpm
+    #     dest: /tmp/amazon-cloudwatch-agent.rpm
+    #   when: ansible_facts['pkg_mgr'] == 'yum' or ansible_facts['pkg_mgr'] == 'dnf'
+    # - name: Install CloudWatch agent package (for RedHat/CentOS/Amazon Linux)
+    #   yum:
+    #     name: /tmp/amazon-cloudwatch-agent.rpm
+    #     state: present
+    #   when: ansible_facts['pkg_mgr'] == 'yum' or ansible_facts['pkg_mgr'] == 'dnf'
+
+
+    - name: Copy CloudWatch agent configuration file
+      copy:
+        src: cloudwatch-agent-config.json
+        dest: /opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Apply CloudWatch agent configuration and start service
+      command: /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json -s
+      # This command implicitly starts the service if it's not running and applies the config.
+      # The 'service' module task below is still useful to ensure it's enabled on boot.
+
+    - name: Ensure CloudWatch agent service is enabled on boot
+      service:
+        name: amazon-cloudwatch-agent
+        state: started # Keep state as started to ensure it's running if the above command didn't start it for some reason
+        enabled: yes
