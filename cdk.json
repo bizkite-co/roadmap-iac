@@ -1,6 +1,7 @@
 {
   "app": "npx ts-node bin/auto-start-stop-ec2.ts",
   "context": {
-    "snsTopicArn": "arn:aws:sns:us-west-1:318364255844:site-down"
+    "snsTopicArn": "arn:aws:sns:us-west-1:318364255844:site-down",
+    "dummy": "true"
   }
 }

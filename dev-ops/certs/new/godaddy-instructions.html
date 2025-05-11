@@ -1,0 +1,49 @@
+<div class="jsx-1151011798 jsx-2778472679 article-content "><h1 class="jsx-1151011798 jsx-2778472679">Manually install an SSL certificate on my Apache server (Ubuntu)</h1><p>Not the right server type? Go back to the <a target="_self" href="https://www.godaddy.com/help/manually-install-an-ssl-certificate-on-my-server-16623" data-track-name="manually-install-an-ssl-certificate-on-my-server-16623_link" data-track-eid-click="" data-tracked="">list of installation instructions.</a></p>
+
+<p>After your <a target="_blank" href="https://www.godaddy.com/help/generate-a-csr-certificate-signing-request-5343" data-track-name="generate-a-csr-certificate-signing-request-5343_link" data-track-eid-click="" data-tracked="">certificate request</a> is approved, you can <a target="_blank" href="https://www.godaddy.com/help/download-my-ssl-certificate-files-4754" data-track-name="download-my-ssl-certificate-files-4754_link" data-track-eid-click="" data-tracked="">download your certificate</a> from the SSL manager and install it on your Apache server. If your server is running CentOS instead of Ubuntu, please see <a target="_blank" href="https://www.godaddy.com/help/manually-install-an-ssl-certificate-on-my-apache-server-centos-5238" data-track-name="manually-install-an-ssl-certificate-on-my-apache-server-centos-5238_link" data-track-eid-click="" data-tracked="">Manually install an SSL certificate on my Apache server (CentOS)</a>.</p>
+
+<ol>
+	<li>Find the directory on your server where certificate and key files are stored, then upload your intermediate certificate (<code>gd_bundle.crt</code> or similar) and primary certificate (<code>.crt</code> file with randomized name) into that folder.</li>
+		<ul><li>For security, you should make these files readable by root only.</li></ul>
+
+	<li>Find your Apache configuration file.</li>
+		<ul>
+			<li>On default configurations, you can find a file named <code>apache2.conf</code> in the <code>/etc/apache2</code> folder.</li>
+			<li>If you have configured your server differently, you may be able to find the file with the following command:</li>
+				<pre class="code-sample-blue">grep -i -r "SSLCertificateFile" /etc/apache2/</pre>
+					<ul><li><code>/etc/apache2/</code> may be replaced with the base directory of your Apache installation.</li></ul>
+		</ul>
+	<li>Open this file with your favorite text editor.</li>
+
+	<li>Inside your <code>apache2.conf</code> file, find the &lt; VirtualHost &gt; block.</li>
+	<li>To have your site available on both secure (https) and non-secure (http) connections, make a copy of this block and paste it directly below the existing &lt; VirtualHost &gt; block.</li>
+
+	<li>You can now customize this copy of the &lt; VirtualHost &gt; block for secure connections. Here is an example configuration:</li>
+		<pre class="code-sample-blue">&lt;VirtualHost xxx.xxx.x.x:443&gt;
+	DocumentRoot /var/www/coolexample
+	ServerName coolexample.com www.coolexample.com
+		SSLEngine on
+		SSLCertificateFile /path/to/coolexample.crt
+		SSLCertificateKeyFile /path/to/privatekey.key
+		SSLCertificateChainFile /path/to/intermediate.crt
+&lt;/VirtualHost&gt;</pre>
+			<ul>
+				<li>Don't forget the added <code>443</code> port at the end of your server IP.</li>
+				<li><b>DocumentRoot</b> and <b>ServerName</b> should match your original &lt; VirtualHost &gt; block.</li>
+				<li>The remaining<code>/path/to/...</code> file locations can be replaced with your custom directory and file names.</li>
+			</ul>
+
+	<li>First, run the following command to check your Apache configuration file for errors:</li>
+		<pre class="code-sample-blue">apache2ctl configtest</pre>
+	<li>Confirm that the test returns a <b>Syntax OK</b> response. If it does not, review your configuration files.</li>
+		<p class="alert cs-alert-danger"><span class="uxicon uxicon-alert"></span> <strong>Warning:</strong> The Apache service will not start again if your config files have syntax errors.</p>
+	<li>After confirming a <b>Syntax OK</b> response, run the following command to restart Apache:</li>
+		<pre class="code-sample-blue">apache2ctl restart</pre>
+</ol>
+
+<h2>Next step</h2>
+<ul>
+  <li>To continue installing the SSL certificate, proceed with <a target="_blank" href="https://www.godaddy.com/help/redirect-http-to-https-automatically-8828" data-track-name="redirect-http-to-https-automatically-8828_link" data-track-eid-click="" data-tracked="">Redirect HTTP to HTTPS automatically</a>.</li>
+</ul>
+
+<p class="note"><span class="uxicon uxicon-help"></span> <strong>Note:</strong> As a courtesy, we provide information about how to use certain third-party products, but we do not endorse or directly support third-party products and we are not responsible for the functions or reliability of such products. Third-party marks and logos are registered trademarks of their respective owners. All rights reserved.</p></div>

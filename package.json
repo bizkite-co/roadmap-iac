@@ -8,11 +8,14 @@
     "build": "tsc",
     "watch": "tsc -w",
     "cdk": "cdk",
-    "deploy": "CREATED_AT=$(date) && echo \"CREATED_AT: $CREATED_AT\" | tee docs/cdk-deployment.log && cdk deploy --all --require-approval never  | tee -a docs/cdk-deployment.log",
-    "synth": "cdk synth --all > docs/cdk-outputs.yml",
+    "deploy": "CREATED_AT=$(date) && echo \"CREATED_AT: $CREATED_AT\" | tee docs/cdk-deployment.log && cdk deploy --all --require-approval never  | tee -a docs/cdk-deployment.log 2>&1",
+    "synth": "cdk synth --all > docs/cdk-outputs.json",
     "test:cron": "./scripts/validate-cron.sh",
     "e2e:test-local": "npx playwright test e2e/login.test.ts",
-    "list:cron": "./scripts/list-cron.sh | tee cron-list.json"
+    "list:cron": "./scripts/list-cron.sh | tee cron-list.json",
+    "start:ec2": "./scripts/start-ec2.sh",
+    "check:ec2": "./scripts/check-ec2-status.sh",
+    "test:infra": "./scripts/test-infra.sh"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",

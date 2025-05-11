@@ -1,87 +1,55 @@
-## Plan
+# Plan for Auto-Start-Stop EC2 Instances
 
-This plan outlines the steps to address the user's requirements for the CDK project.
+## Goal
 
-**1. Information Gathering and Clarification:**
+To ensure that the PROD EC2 instance is only stopped and started on Friday nights at 7:00 AM UTC for AWS maintenance, and that the UAT EC2 instance continues to be stopped and started based on the `uatConfig.autoStopSchedule`.
 
-*   **Review Existing Code:** Examine the provided `lib/auto-start-stop-ec2-stack.ts` file content to understand the current CDK stack configuration.
-*   **Examine `stack.config.json`:** Understand its structure and content, as the cron expressions are defined there.
-*   **Lambda Function:** Understand how `lambda/auto-start-stop-ec2.py` determines which instances to start and stop.
-*   **Dependency Versions:** Inspect `package.json` to identify the versions of CDK and other dependencies.
-*   **Clarifying Questions:** Ask the user questions to clarify specific requirements and assumptions.
+## Current Status
 
-**2. Task Breakdown and Planning:**
+The `autoStopSchedule` setting in `stack.config.json` is not being respected, and both servers are being stopped each night. The website is also not running reliably after the EC2 instance is started.
 
-*   **Add `auto-stop` Schedule for UAT:**
-    *   Modify `stack.config.json` to include a new cron schedule for UAT.
-    *   Update the CDK stack to use this new schedule.
-*   **Add Login E2E Test:**
-    *   Determine the appropriate testing framework and tools.
-    *   Create a new test script that performs the login E2E test.
-    *   Configure the test to run twice daily.
-    *   Implement SNS notification on failure, including specific failure details.
-*   **Review Dependency Versions:**
-    *   Identify outdated dependencies in `package.json`.
-    *   Update dependencies to the latest versions.
-*   **Modernize Tooling:**
-    *   Explore opportunities to use more modern and up-to-date tooling.
-    *   Address the mixed Python and TypeScript code.
+## Steps
 
-**3. Implementation:**
+1.  **Fix the `deploy_prod.sh` script to properly deploy the application:**
+    *   The `deploy_prod.sh` script should not build the WAR file. It should deploy the WAR file that was already tested in UAT.
+    *   The `deploy_prod.sh` script should use the `scripts/copy_if_different.sh` script to copy the `roadmap.war`, `setenv.sh`, and `logback.xml` files to the PROD server only if they have changed.
+    *   The `deploy_prod.sh` script should use a temporary directory on the PROD server to store the files before moving them to their final destination.
+    *   The `deploy_prod.sh` script should include a step to start Tomcat on the PROD server after copying the files.
+    *   The `deploy_prod.sh` script should use SSH to connect to the PROD server if the public IP address is in the whitelist, and SSM if it is not.
+2.  **Create a short REPL to test the infrastructure:**
+    *   Create a script `scripts/test-infra.sh` that allows us to:
+        *   Start PROD.
+        *   Check that the site is running.
+        *   Modify the published schedule to be triggered in one or two minutes.
+        *   Check if the site is running again a minute after that.
+3.  **Manage alarms and alerts through the CDK:**
+    *   Investigate the existing alarms and alerts for the PROD server.
+    *   Determine how to manage these alarms and alerts through the CDK.
+    *   Implement the necessary changes in the CDK stack.
+4.  **Consolidate the stacks into this auto-stop-start repo:**
+    *   Move the deployment pipeline CDK from the `roadmap-website` repo to this repo.
+    *   Move any relevant scripts from the `roadmap-website.wiki/dev-ops` directory to this repo.
+    *   Update the CDK stack to include all the necessary resources.
 
-*   I will use the `read_file` tool to examine the contents of `stack.config.json`, `lambda/auto-start-stop-ec2.py`, and `package.json`.
-*   I will use the `write_to_file` tool to modify `lib/auto-start-stop-ec2-stack.ts` and `stack.config.json`.
-*   I will use the `execute_command` tool to run commands for installing dependencies and running tests.
+## Next Steps
 
-**4. Questions for the User:**
+1.  Modify the `deploy_prod.sh` script to use the `scripts/copy_if_different.sh` script to copy the files to the PROD server.
+2.  Modify the `deploy_prod.sh` script to add a step to start Tomcat on the PROD server after copying the files.
+3.  Test the `deploy_prod.sh` script to ensure that it is working correctly.
+4.  Create the `scripts/test-infra.sh` script.
+5.  Investigate the existing alarms and alerts for the PROD server.
+6.  Determine how to manage these alarms and alerts through the CDK.
+7.  Create a GH Issue to track the progress of this task.
 
-*   Could you provide the content of `stack.config.json`?
-*   What is the instance ID of the UAT server?
-*   What is the desired region for the UAT server?
-*   What testing framework would you prefer for the E2E tests (e.g., Jest, Mocha, Playwright)?
-*   Do you have an existing SNS topic that I should use for the failure notifications, or should I create a new one?
-*   Can you provide the login URL for the UAT environment?
-*   What credentials should be used for the login E2E test?
-*   What is the desired frequency for the E2E tests (e.g., 09:00 and 21:00)?
+## Considerations
 
-**5. Mermaid Diagram:**
+*   The `deploy_prod.sh` script should be as efficient as possible to minimize downtime.
+*   The deployment process should be automated as much as possible.
+*   The alarms and alerts should be managed through the CDK to ensure that they are consistent and up-to-date.
+*   The code should be well-documented and easy to understand.
 
-```mermaid
-graph TD
-    A[Start] --> B{Information Gathering};
-    B --> C{Review auto-start-stop-ec2-stack.ts};
-    B --> D{Examine stack.config.json};
-    B --> E{Inspect lambda/auto-start-stop-ec2.py};
-    B --> F{Check package.json for dependencies};
-    C --> G{Understand CDK Stack};
-    D --> H{Understand Cron Expressions};
-    E --> I{Understand Instance Logic};
-    F --> J{Identify Dependency Versions};
-    J --> K{Check for Outdated Dependencies};
-    K --> L{Update Dependencies if Needed};
-    B --> M{Ask Clarifying Questions};
-    M --> N{UAT Instance ID?};
-    M --> O{UAT Region?};
-    M --> P{Testing Framework Preference?};
-    M --> Q{Existing SNS Topic?};
-    M --> R{Login URL?};
-    M --> S{Login Credentials?};
-    M --> T{E2E Test Frequency?};
-    G --> U{Add auto-stop Schedule for UAT};
-    H --> U;
-    I --> V{Add Login E2E Test};
-    J --> W{Review Dependency Versions};
-    W --> X{Modernize Tooling};
-    U --> Y{Modify stack.config.json};
-    U --> Z{Update CDK Stack};
-    V --> AA{Create Test Script};
-    V --> BB{Configure Test Schedule};
-    V --> CC{Implement SNS Notification};
-    X --> DD{Explore Modern Tooling};
-    Y --> EE{Write to File};
-    Z --> EE;
-    AA --> EE;
-    BB --> EE;
-    CC --> EE;
-    DD --> EE;
-    EE --> FF[Complete];
+## Unresolved Questions
+
+*   What is the best way to manage the alarms and alerts through the CDK?
+*   What is the best way to test the infrastructure changes?
+*   What is the best way to handle the dependencies between the different stacks?
