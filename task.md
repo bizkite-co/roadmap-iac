@@ -23,16 +23,15 @@ Improve the E2E test failure messages to output the value of the path being test
 *   Added the stack region and account number to the `docs/cdk-outputs.yml` file.
 *   Appended my achievements to the `task.md` file and created a multiline git commit.
 
-## Next Task: Modify deploy_prod.sh to use copy_if_different.sh
+## Next Task: Create scripts/test-infra.sh
 
 **Description:**
 
-Modify the `deploy_prod.sh` script to use the `scripts/copy_if_different.sh` script to copy the `roadmap.war`, `setenv.sh`, and `logback.xml` files to the PROD server only if they have changed.
+Create a script `scripts/test-infra.sh` that can start Tomcat on the PROD server, verify the site's availability, and facilitate testing of the auto-start-stop schedules.
 
 **Steps:**
 
-1.  Modify the `deploy_prod.sh` script to use the `scripts/copy_if_different.sh` script to copy the files to the PROD server.
-*   Modified the `../roadmap-website/deploy_prod.sh` script to use `../auto-start-stop-ec2/scripts/copy_if_different.sh` for copying `roadmap.war`, `setenv.sh`, and `logback.xml`.
-*   Corrected the `../auto-start-stop-ec2/scripts/copy_if_different.sh` script to compare hashes of the local file and the remote destination file.
-*   Updated the `../roadmap-website/deploy_prod.sh` script to correctly retrieve the remote version from the WAR file using SSM.
-*   Removed the unnecessary `mv` command from `../roadmap-website/deploy_prod.sh`.
+1.  Create the initial version of `scripts/test-infra.sh`.
+2.  Implement the core functionality for starting Tomcat and verifying the site.
+3.  Add basic schedule modification and status checking capabilities.
+4.  Refine the script based on testing needs and explore integration with AWS CLI testing tools.

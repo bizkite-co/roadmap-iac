@@ -22,6 +22,8 @@ The `autoStopSchedule` setting in `stack.config.json` is not being respected, an
         *   Check that the site is running.
         *   Modify the published schedule to be triggered in one or two minutes.
         *   Check if the site is running again a minute after that.
+    *   Integrate testing of the `deploy_prod.sh` script using `test-infra.sh` to verify Tomcat startup and site availability after deployment.
+    *   Explore using AWS CLI testing tools (e.g., `aws stepfunctions test-state`) to test the Step Functions state machine logic in isolation.
 3.  **Manage alarms and alerts through the CDK:**
     *   Investigate the existing alarms and alerts for the PROD server.
     *   Determine how to manage these alarms and alerts through the CDK.

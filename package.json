@@ -15,7 +15,10 @@
     "list:cron": "./scripts/list-cron.sh | tee cron-list.json",
     "start:ec2": "./scripts/start-ec2.sh",
     "check:ec2": "./scripts/check-ec2-status.sh",
-    "test:infra": "./scripts/test-infra.sh"
+    "test:infra": "./scripts/test-infra.sh",
+    "test:schedule": "./scripts/test-schedule.sh",
+    "start:prod": "ssh $prod sudo /opt/tomcat/apache-tomcat-9.0.53/bin/startup.sh",
+    "stop:prod": "ssh $prod sudo /opt/tomcat/apache-tomcat-9.0.53/bin/shutdown.sh"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",
