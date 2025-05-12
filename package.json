@@ -18,7 +18,11 @@
     "test:infra": "./scripts/test-infra.sh",
     "test:schedule": "./scripts/test-schedule.sh",
     "start:prod": "ssh $prod sudo /opt/tomcat/apache-tomcat-9.0.53/bin/startup.sh",
-    "stop:prod": "ssh $prod sudo /opt/tomcat/apache-tomcat-9.0.53/bin/shutdown.sh"
+    "stop:prod": "ssh $prod sudo /opt/tomcat/apache-tomcat-9.0.53/bin/shutdown.sh",
+    "cert:install:uat": "ansible-playbook dev-ops/ansible/install-new-certs.yml -i dev-ops/ansible/inventory -l UAT -e target_host=UAT",
+    "cert:install:prod": "ansible-playbook dev-ops/ansible/install-new-certs.yml -i dev-ops/ansible/inventory -l PROD -e target_host=PROD",
+    "cert:rollback:uat": "ansible-playbook dev-ops/ansible/rollback-certs.yml -i dev-ops/ansible/inventory -l UAT -e target_host=UAT",
+    "cert:rollback:prod": "ansible-playbook dev-ops/ansible/rollback-certs.yml -i dev-ops/ansible/inventory -l PROD -e target_host=PROD"
   },
   "devDependencies": {
     "@types/jest": "^29.5.14",

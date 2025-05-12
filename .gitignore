@@ -8,3 +8,4 @@ cdk.out
 
 # condig files
 stack.config.json
+*.key

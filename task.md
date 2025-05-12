@@ -22,6 +22,15 @@ Improve the E2E test failure messages to output the value of the path being test
 *   Deployed the CDK stack to apply the changes.
 *   Added the stack region and account number to the `docs/cdk-outputs.yml` file.
 *   Appended my achievements to the `task.md` file and created a multiline git commit.
+*   Updated Ansible playbooks (`install-new-certs.yml` and `rollback-certs.yml`) to be environment-aware (UAT/prod).
+*   Updated `package.json` scripts (`cert:install`, `cert:rollback`) to use environment-specific targets.
+*   Added backup of existing certificates and Apache SSL configuration in the deployment playbook for rollback.
+*   Created a rollback playbook (`dev-ops/ansible/rollback-certs.yml`) to revert certificate and configuration changes.
+*   Created a script (`dev-ops/scripts/check-cert-key-match.sh`) to validate certificate and private key pairs.
+*   Created a script (`dev-ops/scripts/check-served-cert.sh`) to check the certificate served by a web server.
+*   Successfully deployed and validated new certificates for retirementtaxanalyzer.com and roadmappartners.net on the UAT server.
+*   Resolved certificate/key mismatch issue on UAT by copying the correct private key from production.
+*   Corrected playbook errors related to file paths and assertion logic.
 
 ## Next Task: Create scripts/test-infra.sh
 

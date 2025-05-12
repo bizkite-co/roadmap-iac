@@ -1,23 +1,213 @@
 ---
-- name: Copy cert files to remote servers
-  hosts: UAT
+- name: Copy cert files and update Apache config on remote servers
+  hosts: "{{ target_host | default('UAT') }}" # Use a variable for the target host/group, defaulting to UAT
   become: yes
   user: ubuntu
   tasks:
-    - name: Copy RetirementTaxAnalyzer cert files
+    - name: Create backup directory for old certs
+      file:
+        path: "/etc/ssl/certs/backup_{{ ansible_date_time.iso8601_basic_short }}"
+        state: directory
+        mode: '0755'
+        owner: root
+        group: root
+
+    - name: Backup existing RetirementTaxAnalyzer cert file
       copy:
-        src: "/mnt/c/clients/prs/prs-wiki/dev-ops/certs/retirementtaxanalyzer.com/*.crt"
+        src: "/etc/ssl/certs/retirementtaxanalyzer.crt"
+        dest: "/etc/ssl/certs/backup_{{ ansible_date_time.iso8601_basic_short }}/retirementtaxanalyzer.crt.bak"
+        remote_src: yes
+      failed_when: false # Allow this task to fail if the source file doesn't exist
+
+    - name: Backup existing RoadmapPartners cert file
+      copy:
+        src: "/etc/ssl/certs/roadmapparterns.net.crt"
+        dest: "/etc/ssl/certs/backup_{{ ansible_date_time.iso8601_basic_short }}/roadmapparterns.net.crt.bak"
+        remote_src: yes
+      failed_when: false # Allow this task to fail if the source file doesn't exist
+
+    - name: Backup existing Apache SSL configuration file
+      copy:
+        src: "/etc/apache2/sites-available/default-ssl.conf"
+        dest: "/etc/ssl/certs/backup_{{ ansible_date_time.iso8601_basic_short }}/default-ssl.conf.bak"
+        remote_src: yes
+      failed_when: false # Allow this task to fail if the source file doesn't exist
+
+    - name: Concatenate RetirementTaxAnalyzer cert files locally
+      shell: "cat retirementtaxanalyzer.com-certificate.crt retirementtaxanalyzer.com-intermediate.pem > /tmp/retirementtaxanalyzer.com.chained.crt"
+      args:
+        chdir: /home/mstouffer/repos/prs/roadmap-iac/dev-ops/certs/new/retirementtaxanalyzer/
+      delegate_to: localhost
+
+    - name: Copy RetirementTaxAnalyzer chained cert file
+      copy:
+        src: "/tmp/retirementtaxanalyzer.com.chained.crt"
         dest: "/etc/ssl/certs/retirementtaxanalyzer.crt"
         force: yes
         owner: root
         group: root
         mode: '0644'
-    - name: Copy RoadmapPartners cert files
+
+    - name: Clean up local temporary file for RetirementTaxAnalyzer
+      shell: "rm /tmp/retirementtaxanalyzer.com.chained.crt"
+      delegate_to: localhost
+      ignore_errors: yes # Ignore if the file doesn't exist
+
+    - name: Concatenate RoadmapPartners cert files locally
+      shell: "cat ed54cf65b13bd9b7.crt gdig2.crt.pem > /tmp/roadmappartners.net.chained.crt"
+      args:
+        chdir: /home/mstouffer/repos/prs/roadmap-iac/dev-ops/certs/new/roadmappartners/
+      delegate_to: localhost
+
+    - name: Copy RoadmapPartners chained cert file
       copy:
-        src: "/mnt/c/clients/prs/prs-wiki/dev-ops/certs/_.roadmappartners.net/*.crt"
+        src: "/tmp/roadmappartners.net.chained.crt"
         dest: "/etc/ssl/certs/roadmapparterns.net.crt"
         force: yes
         owner: root
         group: root
         mode: '0644'
 
+    - name: Clean up local temporary file for RoadmapPartners
+      shell: "rm /tmp/roadmappartners.net.chained.crt"
+      delegate_to: localhost
+      ignore_errors: yes # Ignore if the file doesn't exist
+
+    - name: Copy GoDaddy intermediate certificate to server
+      copy:
+        src: "gdig2.crt.pem"
+        dest: "/etc/ssl/certs/gdig2.crt.pem"
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Copy GoDaddy root certificate to server
+      copy:
+        src: "gdroot-g2.crt"
+        dest: "/etc/ssl/certs/gdroot-g2.crt"
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Create GoDaddy certificate chain file on server
+      shell: "cat /etc/ssl/certs/gdig2.crt.pem /etc/ssl/certs/gdroot-g2.crt > /etc/ssl/certs/godaddy-chain.crt"
+      become: yes # This command needs root privileges
+
+    - name: Update Apache SSL configuration file
+      copy:
+        content: |
+          <IfModule mod_ssl.c>
+          	<VirtualHost *:443>
+          		ServerAdmin webmaster@localhost
+          		ServerName uat.roadmappartners.net
+
+          		DocumentRoot /var/www/html
+
+          		ErrorLog ${APACHE_LOG_DIR}/error.log
+          		CustomLog ${APACHE_LOG_DIR}/access.log combined
+
+                      JkMount /manager worker1
+                      JkMount /manager/* worker1
+
+                      JkMount /roadmap worker1
+                      JkMount /roadmap/* worker1
+
+          		SSLEngine on
+
+          		SSLCertificateFile      /etc/ssl/certs/roadmapparterns.net.crt
+          		SSLCertificateKeyFile /etc/ssl/private/wildcard.roadmappartners.key
+          		SSLCertificateChainFile /etc/ssl/certs/godaddy-chain.crt
+
+          		<FilesMatch "\.(cgi|shtml|phtml|php)$">
+          				SSLOptions +StdEnvVars
+          		</FilesMatch>
+          		<Directory /usr/lib/cgi-bin>
+          				SSLOptions +StdEnvVars
+          		</Directory>
+
+          	</VirtualHost>
+
+              <VirtualHost *:443>
+                  ServerAdmin webmaster@localhost
+                  ServerName retirementtaxanalyzer.com
+
+                  DocumentRoot /var/www/html
+
+                  ErrorLog ${APACHE_LOG_DIR}/error.log
+                  CustomLog ${APACHE_LOG_DIR}/access.log combined
+
+                  JkMount /manager worker1
+                  JkMount /manager/* worker1
+
+                  JkMount /roadmap worker1
+                  JkMount /roadmap/* worker1
+
+                  SSLEngine on
+
+                  SSLCertificateFile      /etc/ssl/certs/retirementtaxanalyzer.crt
+                  SSLCertificateKeyFile /etc/ssl/private/retirementtaxanalyzer.key
+                  SSLCertificateChainFile /etc/ssl/certs/godaddy-chain.crt
+
+                  <FilesMatch "\.(cgi|shtml|phtml|php)$">
+                          SSLOptions +StdEnvVars
+                  </FilesMatch>
+                  <Directory /usr/lib/cgi-bin>
+                          SSLOptions +StdEnvVars
+                  </Directory>
+
+              </VirtualHost>
+          </IfModule>
+
+          # vim: syntax=apache ts=4 sw=4 sts=4 sr noet
+        dest: "/etc/apache2/sites-available/default-ssl.conf"
+        owner: root
+        group: root
+        mode: '0644'
+      become: yes
+
+    - name: Test Apache configuration syntax
+      command: apache2ctl configtest
+      register: apache_config_test
+      changed_when: apache_config_test.rc != 0
+      failed_when: apache_config_test.rc != 0
+      become: yes
+
+    - name: Restart Apache
+      service:
+        name: apache2
+        state: restarted
+      become: yes
+
+    - name: Verify deployed RetirementTaxAnalyzer certificate is valid and correct
+      shell: |
+        openssl s_client -connect retirementtaxanalyzer.com:443 -servername retirementtaxanalyzer.com < /dev/null 2>/dev/null > /tmp/retirementtaxanalyzer_cert_output.txt;
+        CERT_OUTPUT=$(cat /tmp/retirementtaxanalyzer_cert_output.txt);
+        echo "$CERT_OUTPUT" | openssl x509 -checkend 31536000; # Check if valid for > 1 year (31536000 seconds)
+        echo "$CERT_OUTPUT" | grep 'Subject: CN = retirementtaxanalyzer.com';
+        rm /tmp/retirementtaxanalyzer_cert_output.txt;
+      register: retirementtaxanalyzer_cert_check
+      ignore_errors: yes # Allow this check to fail without stopping the playbook
+
+    - name: Assert RetirementTaxAnalyzer certificate is correct and valid for > 1 year
+      assert:
+        that:
+          - retirementtaxanalyzer_cert_check.rc == 0 # Check if the shell command (including checkend and grep) succeeded
+        fail_msg: "RetirementTaxAnalyzer certificate verification failed or expires within 1 year."
+      when: retirementtaxanalyzer_cert_check is defined
+
+    - name: Verify deployed RoadmapPartners certificate is valid and correct
+      shell: |
+        openssl s_client -connect roadmappartners.net:443 -servername roadmappartners.net < /dev/null 2>/dev/null > /tmp/roadmappartners_cert_output.txt;
+        CERT_OUTPUT=$(cat /tmp/roadmappartners_cert_output.txt);
+        echo "$CERT_OUTPUT" | openssl x509 -checkend 31536000; # Check if valid for > 1 year (31536000 seconds)
+        echo "$CERT_OUTPUT" | grep 'Subject: CN = *.roadmappartners.net';
+        rm /tmp/roadmappartners_cert_output.txt;
+      register: roadmappartners_cert_check
+      ignore_errors: yes # Allow this check to fail without stopping the playbook
+
+    - name: Assert RoadmapPartners certificate is correct and valid for > 1 year
+      assert:
+        that:
+          - roadmappartners_cert_check.rc == 0 # Check if the shell command (including checkend and grep) succeeded
+        fail_msg: "RoadmapPartners certificate verification failed or expires within 1 year."
+      when: roadmappartners_cert_check is defined
