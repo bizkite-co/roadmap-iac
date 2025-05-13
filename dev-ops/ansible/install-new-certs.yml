@@ -1,9 +1,23 @@
 ---
-- name: Copy cert files and update Apache config on remote servers
+- name: Deploy ACM Certificates and Update Apache Config on remote servers
   hosts: "{{ target_host | default('UAT') }}" # Use a variable for the target host/group, defaulting to UAT
   become: yes
   user: ubuntu
+  vars:
+    # Define variables for ACM certificate ARNs - these should be passed as extra vars
+    retirement_tax_analyzer_cert_arn: "{{ retirement_tax_analyzer_cert_arn }}"
+    roadmap_partners_cert_arn: "{{ roadmap_partners_cert_arn }}"
+    # Define paths for the deployed certificates on the EC2 instance
+    retirement_tax_analyzer_cert_path: "/etc/ssl/certs/retirementtaxanalyzer.crt"
+    roadmap_partners_cert_path: "/etc/ssl/certs/roadmappartners.net.crt"
+    godaddy_chain_path: "/etc/ssl/certs/godaddy-chain.crt" # This might still be needed if ACM chain is different or for compatibility
+
   tasks:
+    - name: Ensure AWS CLI is installed (if not already present)
+      package:
+        name: awscli
+        state: present
+
     - name: Create backup directory for old certs
       file:
         path: "/etc/ssl/certs/backup_{{ ansible_date_time.iso8601_basic_short }}"
@@ -14,14 +28,14 @@
 
     - name: Backup existing RetirementTaxAnalyzer cert file
       copy:
-        src: "/etc/ssl/certs/retirementtaxanalyzer.crt"
+        src: "{{ retirement_tax_analyzer_cert_path }}"
         dest: "/etc/ssl/certs/backup_{{ ansible_date_time.iso8601_basic_short }}/retirementtaxanalyzer.crt.bak"
         remote_src: yes
       failed_when: false # Allow this task to fail if the source file doesn't exist
 
     - name: Backup existing RoadmapPartners cert file
       copy:
-        src: "/etc/ssl/certs/roadmapparterns.net.crt"
+        src: "{{ roadmap_partners_cert_path }}"
         dest: "/etc/ssl/certs/backup_{{ ansible_date_time.iso8601_basic_short }}/roadmapparterns.net.crt.bak"
         remote_src: yes
       failed_when: false # Allow this task to fail if the source file doesn't exist
@@ -33,65 +47,50 @@
         remote_src: yes
       failed_when: false # Allow this task to fail if the source file doesn't exist
 
-    - name: Concatenate RetirementTaxAnalyzer cert files locally
-      shell: "cat retirementtaxanalyzer.com-certificate.crt retirementtaxanalyzer.com-intermediate.pem > /tmp/retirementtaxanalyzer.com.chained.crt"
-      args:
-        chdir: /home/mstouffer/repos/prs/roadmap-iac/dev-ops/certs/new/retirementtaxanalyzer/
-      delegate_to: localhost
+    - name: Fetch RetirementTaxAnalyzer certificate from ACM
+      shell: "aws acm get-certificate --certificate-arn {{ retirement_tax_analyzer_cert_arn }} --output json"
+      register: retirementtaxanalyzer_acm_cert
+      environment:
+        AWS_REGION: "{{ ansible_facts.aws_region }}" # Use gathered fact for region
 
-    - name: Copy RetirementTaxAnalyzer chained cert file
+    - name: Write RetirementTaxAnalyzer certificate body to file
       copy:
-        src: "/tmp/retirementtaxanalyzer.com.chained.crt"
-        dest: "/etc/ssl/certs/retirementtaxanalyzer.crt"
-        force: yes
+        content: "{{ retirementtaxanalyzer_acm_cert.stdout | from_json | json_query('Certificate') }}"
+        dest: "{{ retirement_tax_analyzer_cert_path }}"
         owner: root
         group: root
         mode: '0644'
 
-    - name: Clean up local temporary file for RetirementTaxAnalyzer
-      shell: "rm /tmp/retirementtaxanalyzer.com.chained.crt"
-      delegate_to: localhost
-      ignore_errors: yes # Ignore if the file doesn't exist
-
-    - name: Concatenate RoadmapPartners cert files locally
-      shell: "cat ed54cf65b13bd9b7.crt gdig2.crt.pem > /tmp/roadmappartners.net.chained.crt"
-      args:
-        chdir: /home/mstouffer/repos/prs/roadmap-iac/dev-ops/certs/new/roadmappartners/
-      delegate_to: localhost
-
-    - name: Copy RoadmapPartners chained cert file
+    - name: Write RetirementTaxAnalyzer certificate chain to file
       copy:
-        src: "/tmp/roadmappartners.net.chained.crt"
-        dest: "/etc/ssl/certs/roadmapparterns.net.crt"
-        force: yes
+        content: "{{ retirementtaxanalyzer_acm_cert.stdout | from_json | json_query('CertificateChain') }}"
+        dest: "{{ godaddy_chain_path }}" # Assuming ACM chain can replace GoDaddy chain
         owner: root
         group: root
         mode: '0644'
 
-    - name: Clean up local temporary file for RoadmapPartners
-      shell: "rm /tmp/roadmappartners.net.chained.crt"
-      delegate_to: localhost
-      ignore_errors: yes # Ignore if the file doesn't exist
+    - name: Fetch RoadmapPartners certificate from ACM
+      shell: "aws acm get-certificate --certificate-arn {{ roadmap_partners_cert_arn }} --output json"
+      register: roadmappartners_acm_cert
+      environment:
+        AWS_REGION: "{{ ansible_facts.aws_region }}" # Use gathered fact for region
 
-    - name: Copy GoDaddy intermediate certificate to server
+    - name: Write RoadmapPartners certificate body to file
       copy:
-        src: "gdig2.crt.pem"
-        dest: "/etc/ssl/certs/gdig2.crt.pem"
+        content: "{{ roadmappartners_acm_cert.stdout | from_json | json_query('Certificate') }}"
+        dest: "{{ roadmap_partners_cert_path }}"
         owner: root
         group: root
         mode: '0644'
 
-    - name: Copy GoDaddy root certificate to server
+    - name: Write RoadmapPartners certificate chain to file (if different from RetirementTaxAnalyzer)
       copy:
-        src: "gdroot-g2.crt"
-        dest: "/etc/ssl/certs/gdroot-g2.crt"
+        content: "{{ roadmappartners_acm_cert.stdout | from_json | json_query('CertificateChain') }}"
+        dest: "{{ godaddy_chain_path }}" # Overwrite if different, or handle separately if needed
         owner: root
         group: root
         mode: '0644'
-
-    - name: Create GoDaddy certificate chain file on server
-      shell: "cat /etc/ssl/certs/gdig2.crt.pem /etc/ssl/certs/gdroot-g2.crt > /etc/ssl/certs/godaddy-chain.crt"
-      become: yes # This command needs root privileges
+      # Consider adding a condition here if the chains might be different and need separate files
 
     - name: Update Apache SSL configuration file
       copy:
@@ -99,7 +98,7 @@
           <IfModule mod_ssl.c>
           	<VirtualHost *:443>
           		ServerAdmin webmaster@localhost
-          		ServerName uat.roadmappartners.net
+          		ServerName uat.roadmappartners.net # Update ServerName if needed for PROD
 
           		DocumentRoot /var/www/html
 
@@ -114,9 +113,9 @@
 
           		SSLEngine on
 
-          		SSLCertificateFile      /etc/ssl/certs/roadmapparterns.net.crt
-          		SSLCertificateKeyFile /etc/ssl/private/wildcard.roadmappartners.key
-          		SSLCertificateChainFile /etc/ssl/certs/godaddy-chain.crt
+          		SSLCertificateFile      {{ roadmap_partners_cert_path }}
+          		SSLCertificateKeyFile /etc/ssl/private/wildcard.roadmappartners.key # Assuming key file remains local
+          		SSLCertificateChainFile {{ godaddy_chain_path }}
 
           		<FilesMatch "\.(cgi|shtml|phtml|php)$">
           				SSLOptions +StdEnvVars
@@ -129,7 +128,7 @@
 
               <VirtualHost *:443>
                   ServerAdmin webmaster@localhost
-                  ServerName retirementtaxanalyzer.com
+                  ServerName retirementtaxanalyzer.com # Update ServerName if needed for PROD
 
                   DocumentRoot /var/www/html
 
@@ -144,9 +143,9 @@
 
                   SSLEngine on
 
-                  SSLCertificateFile      /etc/ssl/certs/retirementtaxanalyzer.crt
-                  SSLCertificateKeyFile /etc/ssl/private/retirementtaxanalyzer.key
-                  SSLCertificateChainFile /etc/ssl/certs/godaddy-chain.crt
+                  SSLCertificateFile      {{ retirement_tax_analyzer_cert_path }}
+                  SSLCertificateKeyFile /etc/ssl/private/retirementtaxanalyzer.key # Assuming key file remains local
+                  SSLCertificateChainFile {{ godaddy_chain_path }}
 
                   <FilesMatch "\.(cgi|shtml|phtml|php)$">
                           SSLOptions +StdEnvVars
