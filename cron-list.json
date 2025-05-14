@@ -18,7 +18,7 @@
 {
     "Name": "AutoStartStopEc2Stack-StopRule00306666-Il5gK14XvfPy",
     "Arn": "arn:aws:events:us-west-1:865664998993:rule/AutoStartStopEc2Stack-StopRule00306666-Il5gK14XvfPy",
-    "ScheduleExpression": "cron(6 17 * * ? *)",
+    "ScheduleExpression": "cron(37 12 * * ? *)",
     "State": "ENABLED",
     "EventBusName": "default",
     "CreatedBy": "865664998993"
@@ -35,7 +35,7 @@
 {
     "Name": "AutoStartStopEc2Stack-e2eTestRule0EDBA3FB9-ogeTP0S7J3yS",
     "Arn": "arn:aws:events:us-west-1:865664998993:rule/AutoStartStopEc2Stack-e2eTestRule0EDBA3FB9-ogeTP0S7J3yS",
-    "ScheduleExpression": "cron(0 13 ? * MON-FRI *)",
+    "ScheduleExpression": "cron(43 12 ? * MON-FRI *)",
     "State": "ENABLED",
     "EventBusName": "default",
     "CreatedBy": "865664998993"
@@ -51,7 +51,7 @@
 {
     "Name": "AutoStartStopEc2Stack-e2eTestRule1B9F6E07B-uDQD6fY9tnNz",
     "Arn": "arn:aws:events:us-west-1:865664998993:rule/AutoStartStopEc2Stack-e2eTestRule1B9F6E07B-uDQD6fY9tnNz",
-    "ScheduleExpression": "cron(0 20 ? * MON-FRI *)",
+    "ScheduleExpression": "cron(45 12 ? * MON-FRI *)",
     "State": "ENABLED",
     "EventBusName": "default",
     "CreatedBy": "865664998993"

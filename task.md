@@ -48,28 +48,28 @@ Leverage AWS Certificate Manager (ACM) for managed certificate lifecycle and Ama
 
 ```mermaid
 graph LR
-    A[Request ACM Certificate (DNS Validation)] --> B{Add CNAME Record to GoDaddy DNS}
+    A[Request ACM Certificate DNS Validation] --> B{Add CNAME Record to GoDaddy DNS}
     B --> C[Verify DNS Propagation]
     C --> D{ACM Validates Domain & Issues Certificate}
     D --> E{ACM Manages Renewal}
     E -- Certificate Approaching Expiration --> F(EventBridge Rule Triggered)
     F --> G(Send SNS Notification)
     E -- Successful Renewal --> H(Scheduled Deployment Trigger)
-    H --> I[Deploy Certificate to EC2 (via Ansible/other)]
+    H --> I[Deploy Certificate to EC2 via Ansible/other]
     I --> J[Implement Certificate Health Checks]
 ```
 
 *(Alternative for Step 2: Migrate DNS to Route 53)*
 ```mermaid
 graph LR
-    A[Request ACM Certificate (DNS Validation)] --> B{Migrate DNS to Route 53}
+    A[Request ACM Certificate DNS Validation] --> B{Migrate DNS to Route 53}
     B --> C{ACM Automatically Creates CNAME in Route 53}
     C --> D{ACM Validates Domain & Issues Certificate}
     D --> E{ACM Manages Renewal}
     E -- Certificate Approaching Expiration --> F(EventBridge Rule Triggered)
     F --> G(Send SNS Notification)
     E -- Successful Renewal --> H(Scheduled Deployment Trigger)
-    H --> I[Deploy Certificate to EC2 (via Ansible/other)]
+    H --> I[Deploy Certificate to EC2 via Ansible/other]
     I --> J[Implement Certificate Health Checks]
 ```
 
@@ -110,3 +110,34 @@ The automated certificate rollover process using AWS ACM and EventBridge has bee
 5.  Ensure AWS Systems Manager Agent is running on the target EC2 instances and they have the necessary IAM role to be managed by SSM.
 6.  Update the `ansible_playbook_path` and `ansible_inventory_path` variables in the `DeployCertificateLambda` code within the CDK stack to the correct paths on the EC2 instance.
 7.  Thoroughly test the end-to-end automated process in a staging environment before deploying to production.
+
+## Subtask: Fix CDK Build Errors
+
+**Description:**
+
+Address the TypeScript compilation errors encountered during the CDK build process to enable successful deployment of the automated certificate rollover infrastructure.
+
+**Current Situation:**
+
+Attempting to build the CDK stack resulted in TypeScript compilation errors related to the `@types/babel__traverse` package.
+
+**Objective:**
+
+Resolve the TypeScript compilation errors to allow the CDK build to complete successfully.
+
+**Steps:**
+
+1.  Analyze the specific TypeScript errors (`TS1005: '?' expected.`) in the context of the project's dependencies and `tsconfig.json`.
+2.  Identify the root cause of the compatibility issue between `@types/babel__traverse` and the current TypeScript version or other dependencies.
+3.  Implement the necessary fix, which may involve:
+    *   Updating or downgrading `@types/babel__traverse`.
+    *   Adjusting TypeScript compiler options in `tsconfig.json`.
+    *   Resolving conflicts with other dependency types.
+4.  Verify that the CDK build (`npm run build`) completes without errors.
+
+**Achievements:**
+
+- Resolved TypeScript compilation errors by updating dependencies and adjusting `tsconfig.json`.
+- Addressed CDK deployment issues related to ACM certificate validation by refactoring ACM resources into a separate construct and temporarily removing its usage from the main stack.
+- Manually removed lingering Route 53 records that prevented CloudFormation stack cleanup.
+- Successfully deployed the core automation infrastructure (excluding ACM certificate creation).

@@ -4,14 +4,22 @@ import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
-import * as acm from 'aws-cdk-lib/aws-certificatemanager';
-import * as route53 from 'aws-cdk-lib/aws-route53';
+// Removed: import * as acm from 'aws-cdk-lib/aws-certificatemanager';
+// Removed: import * as route53 from 'aws-cdk-lib/aws-route53'; // Keep import for type hints if needed elsewhere, but won't create resources
 import * as sns from 'aws-cdk-lib/aws-sns';
 import * as ssm from 'aws-cdk-lib/aws-ssm';
 
 import fs = require('fs');
+// Removed: import { CertificateAutomationConstruct } from './certificate-automation-construct'; // Import the new construct
+
+// Removed: Interface for stack props with certificate ARNs
+// interface AutoStartStopEc2StackProps extends cdk.StackProps {
+//   roadmapPartnersCertificateArn: string;
+//   retirementTaxAnalyzerCertificateArn: string;
+// }
 
 export class AutoStartStopEc2Stack extends cdk.Stack {
+  // Changed constructor to accept optional props
   constructor (scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
@@ -105,65 +113,13 @@ export class AutoStartStopEc2Stack extends cdk.Stack {
       e2eTestRules.push(e2eTestRule);
     });
 
-    // Route 53 Hosted Zones (assuming migration from GoDaddy)
-    const roadmappartnersHostedZone = new route53.HostedZone(this, 'RoadmapPartnersHostedZone', {
-      zoneName: 'roadmappartners.net'
-    });
-
-    const retirementtaxanalyzerHostedZone = new route53.HostedZone(this, 'RetirementTaxAnalyzerHostedZone', {
-      zoneName: 'retirementtaxanalyzer.com'
-    });
-
-    // ACM Certificates with DNS validation via Route 53
-    const roadmapPartnersCert = new acm.Certificate(this, 'RoadmapPartnersCertificate', {
-      domainName: '*.roadmappartners.net',
-      subjectAlternativeNames: ['roadmappartners.net'],
-      validation: acm.CertificateValidation.fromDns(roadmappartnersHostedZone),
-      // Note: For CloudFront, certificate must be in us-east-1.
-      // Assuming for EC2 load balancer in us-west-1 for now.
-    });
-
-    const retirementTaxAnalyzerCert = new acm.Certificate(this, 'RetirementTaxAnalyzerCertificate', {
-      domainName: 'retirementtaxanalyzer.com',
-      validation: acm.CertificateValidation.fromDns(retirementtaxanalyzerHostedZone),
-    });
-
-    // Lambda function to verify DNS propagation and ACM validation
-    const verifyDnsPropagationLambda = new lambda.Function(this, 'VerifyDnsPropagationLambda', {
-      code: lambda.Code.fromInline(fs.readFileSync('lambda/verify-dns-propagation.py', {encoding: 'utf-8'})),
-      handler: 'index.main',
-      timeout: cdk.Duration.seconds(300),
-      runtime: lambda.Runtime.PYTHON_3_9,
-      environment: {
-        // Add any necessary environment variables here, e.g., certificate ARNs
-        // CERTIFICATE_ARNS: JSON.stringify([roadmapPartnersCert.certificateArn, retirementTaxAnalyzerCert.certificateArn])
-      }
-    });
-
-    // Grant the Lambda permissions to interact with ACM, Route 53, and EventBridge
-    verifyDnsPropagationLambda.addToRolePolicy(new iam.PolicyStatement({
-      actions: [
-        'acm:DescribeCertificate',
-        'route53:ListHostedZones',
-        'route53:ListResourceRecordSets',
-        'events:PutEvents' // Permission to put custom events
-      ],
-      resources: ['*'] // Consider restricting to specific resources if possible
-    }));
-
-    // EventBridge Rule to trigger DNS propagation verification periodically
-    // This rule will trigger the Lambda every 15 minutes. Adjust the schedule as needed.
-    new events.Rule(this, 'VerifyDnsPropagationRule', {
-      schedule: events.Schedule.rate(cdk.Duration.minutes(15)),
-      targets: [new targets.LambdaFunction(verifyDnsPropagationLambda, {
-        // Pass certificate ARNs to the Lambda function
-        event: events.RuleTargetInput.fromObject({
-          certificate_arns: [roadmapPartnersCert.certificateArn, retirementTaxAnalyzerCert.certificateArn]
-        })
-      })]
-    });
+    // Removed: Instantiation of CertificateAutomationConstruct
+    // const certificateAutomation = new CertificateAutomationConstruct(this, 'CertificateAutomation', {
+    //   certificateAlertTopic: certificateAlertTopic,
+    // });
 
     // Lambda function to trigger certificate deployment via Systems Manager Run Command
+    // This Lambda's logic might need adjustment if it relied on the construct's outputs
     const deployCertificateLambda = new lambda.Function(this, 'DeployCertificateLambda', {
       code: lambda.Code.fromInline(`
 import boto3
@@ -186,6 +142,9 @@ def main(event, context):
     """
     logger.info("Received event: " + json.dumps(event))
 
+    # This Lambda now expects certificate ARNs directly in the event detail,
+    # or you might need to fetch them differently if not triggered by the verification Lambda.
+    # For now, keeping the existing logic assuming the event structure is provided externally.
     certificate_arns = event.get('detail', {}).get('certificate_arns', [])
     if not certificate_arns:
         logger.error("No certificate ARNs found in the event detail.")
@@ -262,6 +221,7 @@ def main(event, context):
     }));
 
     // EventBridge Rule to trigger certificate deployment on ACM validation success
+    // This rule now expects the event to be put onto the bus externally
     new events.Rule(this, 'AcmValidationSuccessRule', {
       eventPattern: {
         source: ['custom.certificate.automation'],
@@ -306,19 +266,19 @@ def main(event, context):
     });
 
 
-    // EventBridge Rule for ACM Certificate Approaching Expiration
-    new events.Rule(this, 'AcmCertificateExpirationRule', {
-      eventPattern: {
-        source: ['aws.acm'],
-        detailType: ['ACM Certificate State Change'],
-        detail: {
-          certificateArn: [roadmapPartnersCert.certificateArn, retirementTaxAnalyzerCert.certificateArn],
-          domainName: ['*.roadmappartners.net', 'retirementtaxanalyzer.com'],
-          state: ['EXPIRATION_WARNING', 'EXPIRED'] // Trigger on warning and expiration
-        }
-      },
-      targets: [new targets.SnsTopic(certificateAlertTopic)]
-    });
+    // Removed: EventBridge Rule for ACM Certificate Approaching Expiration (now in construct)
+    // new events.Rule(this, 'AcmCertificateExpirationRule', {
+    //   eventPattern: {
+    //     source: ['aws.acm'],
+    //     detailType: ['ACM Certificate State Change'],
+    //     detail: {
+    //       certificateArn: [certificateAutomation.roadmapPartnersCertificateArn, certificateAutomation.retirementTaxAnalyzerCertificateArn],
+    //       domainName: ['*.roadmappartners.net', 'retirementtaxanalyzer.com'],
+    //       state: ['EXPIRATION_WARNING', 'EXPIRED'] // Trigger on warning and expiration
+    //     }
+    //   },
+    //   targets: [new targets.SnsTopic(certificateAlertTopic)]
+    // });
 
     // Stack Outputs
     new cdk.CfnOutput(this, 'AutoStartStopLambdaArn', {
@@ -341,30 +301,33 @@ def main(event, context):
       description: 'The ARN of the SNS topic for certificate expiration alerts.'
     });
 
-    new cdk.CfnOutput(this, 'RoadmapPartnersCertificateArn', {
-      value: roadmapPartnersCert.certificateArn,
-      description: 'The ARN of the ACM certificate for *.roadmappartners.net.'
-    });
+    // Removed: ACM Certificate ARN outputs (now in construct, or handled externally)
+    // new cdk.CfnOutput(this, 'RoadmapPartnersCertificateArn', {
+    //   value: certificateAutomation.roadmapPartnersCertificateArn,
+    //   description: 'The ARN of the ACM certificate for *.roadmappartners.net.'
+    // });
 
-    new cdk.CfnOutput(this, 'RetirementTaxAnalyzerCertificateArn', {
-      value: retirementTaxAnalyzerCert.certificateArn,
-      description: 'The ARN of the ACM certificate for retirementtaxanalyzer.com.'
-    });
+    // new cdk.CfnOutput(this, 'RetirementTaxAnalyzerCertificateArn', {
+    //   value: certificateAutomation.retirementTaxAnalyzerCertificateArn,
+    //   description: 'The ARN of the ACM certificate for retirementtaxanalyzer.com.'
+    // });
 
-    new cdk.CfnOutput(this, 'RoadmapPartnersHostedZoneId', {
-      value: roadmappartnersHostedZone.hostedZoneId,
-      description: 'The ID of the Route 53 Hosted Zone for roadmappartners.net.'
-    });
+    // Removed: Route 53 Hosted Zone outputs are not needed
+    // new cdk.CfnOutput(this, 'RoadmapPartnersHostedZoneId', {
+    //   value: roadmappartnersHostedZone.hostedZoneId,
+    //   description: 'The ID of the Route 53 Hosted Zone for roadmappartners.net.'
+    // });
 
-    new cdk.CfnOutput(this, 'RetirementTaxAnalyzerHostedZoneId', {
-      value: retirementtaxanalyzerHostedZone.hostedZoneId,
-      description: 'The ID of the Route 53 Hosted Zone for retirementtaxanalyzer.com.'
-    });
+    // new cdk.CfnOutput(this, 'RetirementTaxAnalyzerHostedZoneId', {
+    //   value: retirementtaxanalyzerHostedZone.hostedZoneId,
+    //   description: 'The ID of the Route 53 Hosted Zone for retirementtaxanalyzer.com.'
+    // });
 
-    new cdk.CfnOutput(this, 'VerifyDnsPropagationLambdaArn', {
-      value: verifyDnsPropagationLambda.functionArn,
-      description: 'The ARN of the Lambda function that verifies DNS propagation for ACM certificates.'
-    });
+    // Removed: VerifyDnsPropagationLambda ARN output (now in construct)
+    // new cdk.CfnOutput(this, 'VerifyDnsPropagationLambdaArn', {
+    //   value: certificateAutomation.verifyDnsPropagationLambdaArn,
+    //   description: 'The ARN of the Lambda function that verifies DNS propagation for ACM certificates.'
+    // });
 
     new cdk.CfnOutput(this, 'DeployCertificateLambdaArn', {
       value: deployCertificateLambda.functionArn,

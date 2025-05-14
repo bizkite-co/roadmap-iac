@@ -1,42 +1,39 @@
 {
-  "name": "auto-start-stop-ec2",
-  "version": "0.1.1",
-  "bin": {
-    "auto-start-stop-ec2": "bin/auto-start-stop-ec2.js"
+  "dependencies": {
+    "@aws-cdk/aws-codebuild": "^1.204.0",
+    "@aws-cdk/aws-codepipeline": "^1.204.0",
+    "@aws-cdk/aws-codepipeline-actions": "^1.204.0",
+    "@aws-cdk/aws-events": "^1.204.0",
+    "@aws-cdk/aws-events-targets": "^1.204.0",
+    "@aws-cdk/aws-iam": "^1.204.0",
+    "@aws-cdk/aws-lambda": "^1.2.0",
+    "@aws-cdk/aws-s3": "^1.204.0",
+    "@aws-cdk/pipelines": "^1.204.0",
+    "aws-cdk-lib": "^2.151.0",
+    "constructs": "^10.3.0",
+    "typescript": "^5.2.2"
   },
   "scripts": {
-    "build": "tsc",
-    "watch": "tsc -w",
-    "cdk": "cdk",
-    "deploy": "CREATED_AT=$(date) && echo \"CREATED_AT: $CREATED_AT\" | tee docs/cdk-deployment.log && cdk deploy --all --require-approval never  | tee -a docs/cdk-deployment.log 2>&1",
-    "synth": "cdk synth --all > docs/cdk-outputs.json",
-    "test:cron": "./scripts/validate-cron.sh",
-    "e2e:test-local": "npx playwright test e2e/login.test.ts",
-    "list:cron": "./scripts/list-cron.sh | tee cron-list.json",
-    "start:ec2": "./scripts/start-ec2.sh",
-    "check:ec2": "./scripts/check-ec2-status.sh",
-    "test:infra": "./scripts/test-infra.sh",
-    "test:schedule": "./scripts/test-schedule.sh",
-    "start:prod": "ssh $prod sudo /opt/tomcat/apache-tomcat-9.0.53/bin/startup.sh",
-    "stop:prod": "ssh $prod sudo /opt/tomcat/apache-tomcat-9.0.53/bin/shutdown.sh",
-    "cert:install:uat": "ansible-playbook dev-ops/ansible/install-new-certs.yml -i dev-ops/ansible/inventory -l UAT -e target_host=UAT",
-    "cert:install:prod": "ansible-playbook dev-ops/ansible/install-new-certs.yml -i dev-ops/ansible/inventory -l PROD -e target_host=PROD",
-    "cert:rollback:uat": "ansible-playbook dev-ops/ansible/rollback-certs.yml -i dev-ops/ansible/inventory -l UAT -e target_host=UAT",
-    "cert:rollback:prod": "ansible-playbook dev-ops/ansible/rollback-certs.yml -i dev-ops/ansible/inventory -l PROD -e target_host=PROD"
-  },
-  "devDependencies": {
-    "@types/jest": "^29.5.14",
-    "@types/node": "14.14.37",
-    "jest": "^29.7.0",
-    "playwright": "^1.52.0",
-    "ts-node": "^9.1.1",
-    "typescript": "^4.2.3"
-  },
-  "dependencies": {
-    "@aws-sdk/client-s3": "^3.802.0",
-    "@playwright/test": "^1.52.0",
-    "aws-cdk-lib": "^2.194.0",
-    "constructs": "^10.4.2",
-    "source-map-support": "^0.5.19"
+    "build": "sudo ./scripts/build_war.sh",
+    "clean": "sudo ./gradlew clean war",
+    "dev": "bash startup_debug.sh",
+    "cdk-synth": "cd cdk ; npx cdk synth ; cd ..",
+    "cdk-deploy": "./scripts/pre_cdk_deploy.sh",
+    "cdk-destroy": "cd cdk ; npx cdk destroy --require-approval never ; cd ..",
+    "view-codedeploy-logs": "./scripts/view_codedeploy_logs.sh",
+    "get-deployment-status": "./scripts/get_deployment_status.sh",
+    "get-pipeline-status": "aws codepipeline get-pipeline-state --name RoadmapWebAppPipeline | jq '.stageStates[] | {stageName: .stageName, status: .latestExecution.status}'",
+    "start-pipeline-execution": "aws codepipeline start-pipeline-execution --name RoadmapWebAppPipeline",
+    "rollback": "./scripts/rollback.sh",
+    "get-failed-deployment-logs": "./scripts/get_failed_deployment_logs.sh",
+    "deploy-prod": "./deploy_prod.sh",
+    "deploy-uat": "./deploy_uat.sh",
+    "restore-prod": "./restore_prod.sh",
+    "uat-status": "./uat_control.sh status",
+    "uat-ip": "./uat_control.sh ip",
+    "uat-start": "./uat_control.sh start",
+    "uat-stop": "./uat_control.sh stop",
+    "deploy-uat-manual": "./scripts/deploy_uat_manual.sh",
+    "start:prod": " ssh $prod 'sudo /opt/tomcat/apache-tomcat-9.0.53/bin/startup.sh'"
   }
 }
