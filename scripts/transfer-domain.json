@@ -1,0 +1,61 @@
+{
+    "DomainName": "retirementtaxanalyzer.com",
+    "DurationInYears": 1,
+    "Nameservers": [
+        {
+            "Name": "ns-1239.awsdns-26.org"
+        },
+        {
+            "Name": "ns-825.awsdns-39.net"
+        },
+        {
+            "Name": "ns-28.awsdns-03.com"
+        },
+        {
+            "Name": "ns-1537.awsdns-00.co.uk"
+        }
+    ],
+    "AuthCode": "4:%8D5QT7F25439A",
+    "AdminContact": {
+        "FirstName": "Joel",
+        "LastName": "Solomon",
+        "ContactType": "PERSON",
+        "OrganizationName": "PRS, LLC",
+        "AddressLine1": "2 Park Plaza, Suite 320",
+        "City": "Irvine",
+        "State": "CA",
+        "CountryCode": "US",
+        "ZipCode": "92614",
+        "PhoneNumber": "+1.9495442500",
+        "Email": "joel@roadmappartners.net"
+    },
+    "RegistrantContact": {
+        "FirstName": "Joel",
+        "LastName": "Solomon",
+        "ContactType": "PERSON",
+        "OrganizationName": "PRS, LLC",
+        "AddressLine1": "2 Park Plaza, Suite 320",
+        "City": "Irvine",
+        "State": "CA",
+        "CountryCode": "US",
+        "ZipCode": "92614",
+        "PhoneNumber": "+1.9495442500",
+        "Email": "joel@roadmappartners.net"
+    },
+    "TechContact": {
+        "FirstName": "Joel",
+        "LastName": "Solomon",
+        "ContactType": "PERSON",
+        "OrganizationName": "PRS, LLC",
+        "AddressLine1": "2 Park Plaza, Suite 320",
+        "City": "Irvine",
+        "State": "CA",
+        "CountryCode": "US",
+        "ZipCode": "92614",
+        "PhoneNumber": "+1.9495442500",
+        "Email": "joel@roadmappartners.net"
+    },
+    "PrivacyProtectAdminContact": true,
+    "PrivacyProtectRegistrantContact": true,
+    "PrivacyProtectTechContact": true
+}

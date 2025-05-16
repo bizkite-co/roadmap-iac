@@ -1,0 +1,61 @@
+; Domain: retirementtaxanalyzer.com
+; Exported (y-m-d hh:mm:ss): 2025-05-14 15:28:43
+;
+; This file is intended for use for informational and archival
+; purposes ONLY and MUST be edited before use on a production
+; DNS server.
+;
+; In particular, you must update the SOA record with the correct
+; authoritative name server and contact e-mail address information,
+; and add the correct NS records for the name servers which will
+; be authoritative for this domain.
+;
+; For further information, please consult the BIND documentation
+; located on the following website:
+;
+; http://www.isc.org/
+;
+; And RFC 1035:
+;
+; http://www.ietf.org/rfc/rfc1035.txt
+;
+; Please note that we do NOT offer technical support for any use
+; of this zone data, the BIND name server, or any other third-
+; party DNS software.
+;
+; Use at your own risk.
+
+
+$ORIGIN retirementtaxanalyzer.com.
+
+; SOA Record
+@	3600	 IN 	SOA	ns07.domaincontrol.com.	dns.jomax.net. (
+					2023100602
+					28800
+					7200
+					604800
+					3600
+					) 
+
+; A Record
+@	600	 IN 	A	184.72.30.45
+
+; TXT Record
+@	3600	 IN 	TXT	"v=spf1 include:spf.intermedia.net ~all"
+
+; CNAME Record
+autodiscover	3600	 IN 	CNAME	ar-west.exch081.serverdata.net.
+em708578	3600	 IN 	CNAME	return.smtp2go.net.
+s708578._domainkey	3600	 IN 	CNAME	dkim.smtp2go.net.
+track	3600	 IN 	CNAME	track.smtp2go.net.
+www	600	 IN 	CNAME	@
+_domainconnect	3600	 IN 	CNAME	_domainconnect.gd.domaincontrol.com.
+
+; NS Record
+@	3600	 IN 	NS	ns07.domaincontrol.com.
+@	3600	 IN 	NS	ns08.domaincontrol.com.
+
+; MX Record
+@	3600	 IN 	MX	10	west.smtp.mx.exch081.serverdata.net.
+@	3600	 IN 	MX	20	east.smtp.mx.exch081.serverdata.net.
+

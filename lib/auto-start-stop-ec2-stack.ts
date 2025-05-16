@@ -4,13 +4,14 @@ import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
-// Removed: import * as acm from 'aws-cdk-lib/aws-certificatemanager';
-// Removed: import * as route53 from 'aws-cdk-lib/aws-route53'; // Keep import for type hints if needed elsewhere, but won't create resources
+import * as acm from 'aws-cdk-lib/aws-certificatemanager';
+import * as route53 from 'aws-cdk-lib/aws-route53';
 import * as sns from 'aws-cdk-lib/aws-sns';
 import * as ssm from 'aws-cdk-lib/aws-ssm';
+import * as route53domains from 'aws-cdk-lib/aws-route53domains';
 
 import fs = require('fs');
-// Removed: import { CertificateAutomationConstruct } from './certificate-automation-construct'; // Import the new construct
+import { CertificateAutomationConstruct } from './certificate-automation-construct'; // Import the new construct
 
 // Removed: Interface for stack props with certificate ARNs
 // interface AutoStartStopEc2StackProps extends cdk.StackProps {
@@ -62,7 +63,7 @@ export class AutoStartStopEc2Stack extends cdk.Stack {
       });
 
       stopRuleUat.addTarget(new targets.LambdaFunction(lambdaFn, {
-        event: events.RuleTargetInput.fromObject({Region: uatConfig.region, Action: 'stop'})
+        event: targets.RuleTargetInput.fromObject({Region: uatConfig.region, Action: 'stop'})
       }));
     }
 
@@ -75,7 +76,7 @@ export class AutoStartStopEc2Stack extends cdk.Stack {
       });
 
       stopStartRuleProd.addTarget(new targets.LambdaFunction(lambdaFn, {
-        event: events.RuleTargetInput.fromObject({Region: prodConfig.region, Action: 'stopstart'})
+        event: targets.RuleTargetInput.fromObject({Region: prodConfig.region, Action: 'stopstart'})
       }));
 
       console.log('StopStartRuleProd name: ' + stopStartRuleProd.ruleName);
@@ -113,13 +114,12 @@ export class AutoStartStopEc2Stack extends cdk.Stack {
       e2eTestRules.push(e2eTestRule);
     });
 
-    // Removed: Instantiation of CertificateAutomationConstruct
-    // const certificateAutomation = new CertificateAutomationConstruct(this, 'CertificateAutomation', {
-    //   certificateAlertTopic: certificateAlertTopic,
-    // });
+    // Instantiation of CertificateAutomationConstruct
+    const certificateAutomation = new CertificateAutomationConstruct(this, 'CertificateAutomation', {
+      certificateAlertTopic: certificateAlertTopic,
+    });
 
     // Lambda function to trigger certificate deployment via Systems Manager Run Command
-    // This Lambda's logic might need adjustment if it relied on the construct's outputs
     const deployCertificateLambda = new lambda.Function(this, 'DeployCertificateLambda', {
       code: lambda.Code.fromInline(`
 import boto3
@@ -165,40 +165,40 @@ def main(event, context):
         }
 
     # Define the Systems Manager document and parameters
-    # Assumes you have an Ansible playbook available on the EC2 instance
-    # and a Systems Manager document configured to run Ansible playbooks.
-    # You might need to create a custom SSM document or use AWS-RunShellScript
-    # to execute the ansible-playbook command.
-    ssm_document_name = 'AWS-RunShellScript' # Example SSM document
-    ansible_playbook_path = '/home/ubuntu/your-repo/dev-ops/ansible/install-new-certs.yml' # Update with actual path
-    ansible_inventory_path = '/home/ubuntu/your-repo/dev-ops/ansible/inventory' # Update with actual path
-    # Pass certificate ARNs as extra vars to the Ansible playbook
-    extra_vars = {
-        'retirement_tax_analyzer_cert_arn': certificate_arns[0] if len(certificate_arns) > 0 else '',
-        'roadmap_partners_cert_arn': certificate_arns[1] if len(certificate_arns) > 1 else ''
-    }
-    ansible_command = f'ansible-playbook {ansible_playbook_path} -i {ansible_inventory_path} --extra-vars \'{json.dumps(extra_vars)}\''
+        # Assumes you have an Ansible playbook available on the EC2 instance
+        # and a Systems Manager document configured to run Ansible playbooks.
+        # You might need to create a custom SSM document or use AWS-RunShellScript
+        # to execute the ansible-playbook command.
+        ssm_document_name = 'AWS-RunShellScript' # Example SSM document
+        ansible_playbook_path = '/home/ubuntu/your-repo/dev-ops/ansible/install-new-certs.yml' # Update with actual path
+        ansible_inventory_path = '/home/ubuntu/your-repo/dev-ops/ansible/inventory' # Update with actual path
+        # Pass certificate ARNs as extra vars to the Ansible playbook
+        extra_vars = {
+            'retirement_tax_analyzer_cert_arn': certificate_arns[0] if len(certificate_arns) > 0 else '',
+            'roadmap_partners_cert_arn': certificate_arns[1] if len(certificate_arns) > 1 else ''
+        }
+        ansible_command = f'ansible-playbook {ansible_playbook_path} -i {ansible_inventory_path} --extra-vars \'{json.dumps(extra_vars)}\''
 
 
-    try:
-        response = ssm_client.send_command(
-            InstanceIds=[target_instance_id],
-            DocumentName=ssm_document_name,
-            Parameters={'commands': [ansible_command]},
-            Comment='Automated certificate deployment via ACM renewal'
-        )
-        command_id = response['Command']['CommandId']
-        logger.info(f"SSM Run Command sent successfully with Command ID: {command_id}")
-        return {
-            'statusCode': 200,
-            'body': f'SSM Run Command triggered: {command_id}'
-        }
-    except Exception as e:
-        logger.error(f"Error sending SSM Run Command: {e}")
-        return {
-            'statusCode': 500,
-            'body': f'Error triggering SSM Run Command: {e}'
-        }
+        try:
+            response = ssm_client.send_command(
+                InstanceIds=[target_instance_id],
+                DocumentName=ssm_document_name,
+                Parameters={'commands': [ansible_command]},
+                Comment='Automated certificate deployment via ACM renewal'
+            )
+            command_id = response['Command']['CommandId']
+            logger.info(f"SSM Run Command sent successfully with Command ID: {command_id}")
+            return {
+                'statusCode': 200,
+                'body': f'SSM Run Command triggered: {command_id}'
+            }
+        except Exception as e:
+            logger.error(f"Error sending SSM Run Command: {e}")
+            return {
+                'statusCode': 500,
+                'body': f'Error triggering SSM Run Command: {e}'
+            }
       `),
       handler: 'index.main',
       timeout: cdk.Duration.seconds(600), // Adjust timeout as needed for Ansible execution
@@ -230,10 +230,9 @@ def main(event, context):
       },
       targets: [new targets.LambdaFunction(deployCertificateLambda, {
         // Pass the event detail to the target Lambda
-        event: events.RuleTargetInput.fromEventPath('$.detail')
+        event: targets.RuleTargetInput.fromEventPath('$.detail')
       })]
     });
-
 
     // Lambda function for certificate health checks
     const checkCertificateHealthLambda = new lambda.Function(this, 'CheckCertificateHealthLambda', {
@@ -265,20 +264,92 @@ def main(event, context):
       targets: [new targets.LambdaFunction(checkCertificateHealthLambda)]
     });
 
+    const roadmapPartnersHostedZone = new route53.HostedZone(this, 'RoadmapPartnersHostedZone', {
+      zoneName: 'roadmappartners.net'
+    });
 
-    // Removed: EventBridge Rule for ACM Certificate Approaching Expiration (now in construct)
-    // new events.Rule(this, 'AcmCertificateExpirationRule', {
-    //   eventPattern: {
-    //     source: ['aws.acm'],
-    //     detailType: ['ACM Certificate State Change'],
-    //     detail: {
-    //       certificateArn: [certificateAutomation.roadmapPartnersCertificateArn, certificateAutomation.retirementTaxAnalyzerCertificateArn],
-    //       domainName: ['*.roadmappartners.net', 'retirementtaxanalyzer.com'],
-    //       state: ['EXPIRATION_WARNING', 'EXPIRED'] // Trigger on warning and expiration
-    //     }
-    //   },
-    //   targets: [new targets.SnsTopic(certificateAlertTopic)]
-    // });
+    const retirementTaxAnalyzerHostedZone = new route53.HostedZone(this, 'RetirementTaxAnalyzerHostedZone', {
+      zoneName: 'retirementtaxanalyzer.com'
+    });
+
+    // Route 53 Domain Transfer Configuration
+    const retirementTaxAnalyzerDomain = new route53domains.CfnDomain(this, 'RetirementTaxAnalyzerDomain', {
+      domainName: 'retirementtaxanalyzer.com',
+      adminContact: {
+        addressLine1: '123 Main St',
+        city: 'Anytown',
+        countryCode: 'US',
+        email: 'admin@example.com',
+        firstName: 'John',
+        lastName: 'Doe',
+        phoneNumber: '+15551234567',
+        postalCode: '12345',
+        state: 'WA'
+      },
+      registrantContact: {
+        addressLine1: '123 Main St',
+        city: 'Anytown',
+        countryCode: 'US',
+        email: 'registrant@example.com',
+        firstName: 'Jane',
+        lastName: 'Doe',
+        phoneNumber: '+15551234567',
+        postalCode: '12345',
+        state: 'WA'
+      },
+      techContact: {
+        addressLine1: '123 Main St',
+        city: 'Anytown',
+        countryCode: 'US',
+        email: 'tech@example.com',
+        firstName: 'Jim',
+        lastName: 'Doe',
+        phoneNumber: '+15551234567',
+        postalCode: '12345',
+        state: 'WA'
+      },
+      autoRenew: true,
+      transferLock: true,
+    });
+
+    const roadmappartnersDomain = new route53domains.CfnDomain(this, 'RoadmappartnersDomain', {
+      domainName: 'roadmappartners.net',
+      adminContact: {
+        addressLine1: '123 Main St',
+        city: 'Anytown',
+        countryCode: 'US',
+        email: 'admin@example.com',
+        firstName: 'John',
+        lastName: 'Doe',
+        phoneNumber: '+15551234567',
+        postalCode: '12345',
+        state: 'WA'
+      },
+      registrantContact: {
+        addressLine1: '123 Main St',
+        city: 'Anytown',
+        countryCode: 'US',
+        email: 'registrant@example.com',
+        firstName: 'Jane',
+        lastName: 'Doe',
+        phoneNumber: '+15551234567',
+        postalCode: '12345',
+        state: 'WA'
+      },
+      techContact: {
+        addressLine1: '123 Main St',
+        city: 'Anytown',
+        countryCode: 'US',
+        email: 'tech@example.com',
+        firstName: 'Jim',
+        lastName: 'Doe',
+        phoneNumber: '+15551234567',
+        postalCode: '12345',
+        state: 'WA'
+      },
+      autoRenew: true,
+      transferLock: true,
+    });
 
     // Stack Outputs
     new cdk.CfnOutput(this, 'AutoStartStopLambdaArn', {
@@ -301,33 +372,20 @@ def main(event, context):
       description: 'The ARN of the SNS topic for certificate expiration alerts.'
     });
 
-    // Removed: ACM Certificate ARN outputs (now in construct, or handled externally)
-    // new cdk.CfnOutput(this, 'RoadmapPartnersCertificateArn', {
-    //   value: certificateAutomation.roadmapPartnersCertificateArn,
-    //   description: 'The ARN of the ACM certificate for *.roadmappartners.net.'
-    // });
+    new cdk.CfnOutput(this, 'RoadmapPartnersCertificateArn', {
+      value: certificateAutomation.roadmapPartnersCertificateArn,
+      description: 'The ARN of the ACM certificate for *.roadmappartners.net.'
+    });
 
-    // new cdk.CfnOutput(this, 'RetirementTaxAnalyzerCertificateArn', {
-    //   value: certificateAutomation.retirementTaxAnalyzerCertificateArn,
-    //   description: 'The ARN of the ACM certificate for retirementtaxanalyzer.com.'
-    // });
+    new cdk.CfnOutput(this, 'RetirementTaxAnalyzerCertificateArn', {
+      value: certificateAutomation.retirementTaxAnalyzerCertificateArn,
+      description: 'The ARN of the ACM certificate for retirementtaxanalyzer.com.'
+    });
 
-    // Removed: Route 53 Hosted Zone outputs are not needed
-    // new cdk.CfnOutput(this, 'RoadmapPartnersHostedZoneId', {
-    //   value: roadmappartnersHostedZone.hostedZoneId,
-    //   description: 'The ID of the Route 53 Hosted Zone for roadmappartners.net.'
-    // });
-
-    // new cdk.CfnOutput(this, 'RetirementTaxAnalyzerHostedZoneId', {
-    //   value: retirementtaxanalyzerHostedZone.hostedZoneId,
-    //   description: 'The ID of the Route 53 Hosted Zone for retirementtaxanalyzer.com.'
-    // });
-
-    // Removed: VerifyDnsPropagationLambda ARN output (now in construct)
-    // new cdk.CfnOutput(this, 'VerifyDnsPropagationLambdaArn', {
-    //   value: certificateAutomation.verifyDnsPropagationLambdaArn,
-    //   description: 'The ARN of the Lambda function that verifies DNS propagation for ACM certificates.'
-    // });
+    new cdk.CfnOutput(this, 'VerifyDnsPropagationLambdaArn', {
+      value: certificateAutomation.verifyDnsPropagationLambdaArn,
+      description: 'The ARN of the Lambda function that verifies DNS propagation for ACM certificates.'
+    });
 
     new cdk.CfnOutput(this, 'DeployCertificateLambdaArn', {
       value: deployCertificateLambda.functionArn,
@@ -337,6 +395,26 @@ def main(event, context):
     new cdk.CfnOutput(this, 'CheckCertificateHealthLambdaArn', {
       value: checkCertificateHealthLambda.functionArn,
       description: 'The ARN of the Lambda function that performs certificate health checks.'
+    });
+
+    new cdk.CfnOutput(this, 'RoadmapPartnersHostedZoneId', {
+      value: roadmapPartnersHostedZone.hostedZoneId,
+      description: 'The ID of the Route 53 Hosted Zone for roadmappartners.net.'
+    });
+
+    new cdk.CfnOutput(this, 'RetirementTaxAnalyzerHostedZoneId', {
+      value: retirementTaxAnalyzerHostedZone.hostedZoneId,
+      description: 'The ID of the Route 53 Hosted Zone for retirementtaxanalyzer.com.'
+    });
+
+    new cdk.CfnOutput(this, 'RoadmappartnersDomainId', {
+      value: roadmappartnersDomain.logicalId,
+      description: 'The ID of the Route 53 Domain for roadmappartners.net.'
+    });
+
+    new cdk.CfnOutput(this, 'RetirementTaxAnalyzerDomainId', {
+      value: retirementTaxAnalyzerDomain.logicalId,
+      description: 'The ID of the Route 53 Domain for retirementtaxanalyzer.com.'
     });
 
 
@@ -358,8 +436,6 @@ def main(event, context):
     e2eTestRules.forEach((rule: events.Rule, index: number) => {
       new cdk.CfnOutput(this, `E2eTestRuleName${index}`, {
         value: rule.ruleName,
-        description: `The name of the CloudWatch Event Rule that triggers the E2E test ${index}.`
+        description: `The name of the CloudWatch Event Rule that triggers the E2e test ${index}.`
       });
-    });
-  }
-}
+    }

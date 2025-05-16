@@ -1,0 +1,84 @@
+; Domain: roadmappartners.net
+; Exported (y-m-d hh:mm:ss): 2025-05-14 17:52:44
+;
+; This file is intended for use for informational and archival
+; purposes ONLY and MUST be edited before use on a production
+; DNS server.
+;
+; In particular, you must update the SOA record with the correct
+; authoritative name server and contact e-mail address information,
+; and add the correct NS records for the name servers which will
+; be authoritative for this domain.
+;
+; For further information, please consult the BIND documentation
+; located on the following website:
+;
+; http://www.isc.org/
+;
+; And RFC 1035:
+;
+; http://www.ietf.org/rfc/rfc1035.txt
+;
+; Please note that we do NOT offer technical support for any use
+; of this zone data, the BIND name server, or any other third-
+; party DNS software.
+;
+; Use at your own risk.
+
+
+$ORIGIN roadmappartners.net.
+
+; SOA Record
+@	3600	 IN 	SOA	ns01.domaincontrol.com.	dns.jomax.net. (
+					2023100602
+					28800
+					7200
+					604800
+					3600
+					) 
+
+; A Record
+@	600	 IN 	A	184.72.30.45
+dev	1800	 IN 	A	52.8.44.240
+retirementtaxanalyzer	600	 IN 	A	54.177.161.104
+uat	600	 IN 	A	54.177.161.104
+
+; TXT Record
+@	3600	 IN 	TXT	"v=spf1 include:spf.intermedia.net ~all"
+*	3600	 IN 	TXT	"v=spf1 include:spf.intermedia.net ~all"
+amazonses	3600	 IN 	TXT	"ub2bHhqtUlhiERqW2OgNGWN7liHY2nKc2ZW4G+/cTug="
+_amazonses	3600	 IN 	TXT	"RV18Ic8qfLOJ4niOTv0Lr/dJivnKbQa7bAjF/gGcidI="
+_amazonses.dev	3600	 IN 	TXT	"y5WVi0GgHScLx6VbEymtjjojVwX/tGyW4oX/9fGeC2k="
+
+; CNAME Record
+5fkm7do3nrksrmqgutl25dmvr2unl273._domainkey	3600	 IN 	CNAME	5fkm7do3nrksrmqgutl25dmvr2unl273.dkim.amazonses.com.
+autodiscover	3600	 IN 	CNAME	ar-east.exch083.serverdata.net.
+calendar	3600	 IN 	CNAME	calendar.secureserver.net.
+cj7dbqnyzqvbtw3f2ot4dxz6twy5ufg6._domainkey	3600	 IN 	CNAME	cj7dbqnyzqvbtw3f2ot4dxz6twy5ufg6.dkim.amazonses.com.
+dd7tn5uqpkssaapex4qog63wjcmwxxpj._domainkey	3600	 IN 	CNAME	dd7tn5uqpkssaapex4qog63wjcmwxxpj.dkim.amazonses.com.
+em708578	3600	 IN 	CNAME	return.smtp2go.net.
+email	3600	 IN 	CNAME	email.secureserver.net.
+fax	3600	 IN 	CNAME	fax.secureserver.net.
+files	3600	 IN 	CNAME	files.secureserver.net.
+ftp	3600	 IN 	CNAME	@
+imap	3600	 IN 	CNAME	imap.secureserver.net.
+mail	3600	 IN 	CNAME	pop.secureserver.net.
+mobilemail	3600	 IN 	CNAME	mobilemail-v01.prod.mesa1.secureserver.net.
+pop	3600	 IN 	CNAME	pop.secureserver.net.
+s6vsi4idtz3stmqbusuwrizo6cryiiw6._domainkey	3600	 IN 	CNAME	s6vsi4idtz3stmqbusuwrizo6cryiiw6.dkim.amazonses.com.
+s708578._domainkey	3600	 IN 	CNAME	dkim.smtp2go.net.
+smtp	3600	 IN 	CNAME	smtp.secureserver.net.
+track	3600	 IN 	CNAME	track.smtp2go.net.
+www	3600	 IN 	CNAME	@
+xltdcyvxz75sldb2fl5hx7tfw4umqygh._domainkey	3600	 IN 	CNAME	xltdcyvxz75sldb2fl5hx7tfw4umqygh.dkim.amazonses.com.
+yptdw4j7qs2fxxu3ly7ggyokuv5crrhc._domainkey	3600	 IN 	CNAME	yptdw4j7qs2fxxu3ly7ggyokuv5crrhc.dkim.amazonses.com.
+_domainconnect	3600	 IN 	CNAME	_domainconnect.gd.domaincontrol.com.
+
+; NS Record
+@	3600	 IN 	NS	ns01.domaincontrol.com.
+@	3600	 IN 	NS	ns02.domaincontrol.com.
+
+; MX Record
+@	3600	 IN 	MX	0	east.smtp.exch083.serverdata.net.
+@	3600	 IN 	MX	10	west.smtp.exch083.serverdata.net.
+
