@@ -102,6 +102,8 @@ The automated certificate rollover process using AWS ACM and EventBridge has bee
 *   Added the ACM certificate ARN outputs back to the `lib/auto-start-stop-ec2-stack.ts` file.
 *   Installed the `@types/node` module to fix TypeScript errors.
 *   Initiated the domain transfer process for `retirementtaxanalyzer.com` and created a script to monitor the transfer status.
+*   Connected the domain `retirementtaxanalyzer.com` to the PROD EC2 instance by creating an A record in Route 53.
+*   Verified that the domain `retirementtaxanalyzer.com` is pointing to the PROD EC2 instance by executing the `curl retirementtaxanalyzer.com` command and confirming that the output was a 302 redirect to `https://retirementtaxanalyzer.com/`.
 
 **Current Problems**
 
@@ -109,7 +111,6 @@ The automated certificate rollover process using AWS ACM and EventBridge has bee
 *   We need to migrate the DNS records from GoDaddy to Route 53.
 *   We need to get the authorization code for `roadmappartners.net`.
 *   The previous attempt to deploy the CDK stack encountered deployment problems and NPM vulnerabilities.
-*   The domain transfer process is in progress and waiting for approval from GoDaddy.
 
 **Next Steps:**
 
