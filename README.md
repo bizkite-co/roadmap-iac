@@ -1,5 +1,12 @@
 # About
-This is a CDK application for automatically starting / stopping EC2 instances that have specific tag name and value.
+
+This started as a CDK application for automatically starting / stopping EC2 instances that have specific tag name and value.
+
+We have started migrating more IaC functionality for the Roadmap Website into this repo, but the process is incomplete.
+
+Many website deployment IaC features still remain in the `roadmap-website` repo.
+
+Some infrastructure, such as Route53 domains and DNS management features have been migrated into this broader IaC repo.
 
 # Install and clone
 
@@ -38,38 +45,38 @@ This is a CDK application for automatically starting / stopping EC2 instances th
 1. Add tag to EC2 instances
 
     Add tag name `AutoStartStop` with value `TRUE` to the target EC2 instances you want to start and stop automatically.
-2. Create resources.  
+2. Create resources.
 
     Create AWS resources using AWS CDK.
-    
+
     1. Create config file.
-    
+
         ```bash
         $ cp stack.config.json.sample stack.config.json
         ```
 
-        - `event.cron.start` and `event.cron.stop` are cron options for Amazon EventBridge schedule rule.  
-          *default:*  
-          *start: "55 23 ? \* SUN-THU \*" ... it means 8 AM on weekday in Japan time (GMT+0900)*  
+        - `event.cron.start` and `event.cron.stop` are cron options for Amazon EventBridge schedule rule.
+          *default:*
+          *start: "55 23 ? \* SUN-THU \*" ... it means 8 AM on weekday in Japan time (GMT+0900)*
           *stop: "0 12 ? \* \* \*" ... it means 9 PM daily in Japan time (GMT+0900)*
 
-        - `targets.ec2region` is a region that has target EC2 instances.  
+        - `targets.ec2region` is a region that has target EC2 instances.
           *default: ap-northeast-1*
-    
+
     2. Generate CloudFormation template.
-    
+
         ```bash
         $ cdk synth
         ```
 
     3. Check change set. (optional)
-    
+
         ```bash
         $ cdk diff
         ```
-        
+
     4. Deploy.
-    
+
         ```bash
         $ cdk deploy
         ```
@@ -83,7 +90,7 @@ This is a CDK application for automatically starting / stopping EC2 instances th
     ```bash
     $ pip install boto3 moto pytest
     ```
-    
+
 2. Run test command.
 
     ```bash
