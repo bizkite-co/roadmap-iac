@@ -17,7 +17,6 @@
   "scripts": {
     "build": "sudo ./scripts/build_war.sh",
     "clean": "sudo ./gradlew clean war",
-    "dev": "bash startup_debug.sh",
     "cdk-synth": "cd cdk ; npx cdk synth ; cd ..",
     "cdk-deploy": "./scripts/pre_cdk_deploy.sh",
     "cdk-destroy": "cd cdk ; npx cdk destroy --require-approval never ; cd ..",
@@ -36,7 +35,7 @@
     "uat-stop": "./uat_control.sh stop",
     "deploy-uat-manual": "./scripts/deploy_uat_manual.sh",
     "start:prod": " ssh $prod 'sudo /opt/tomcat/apache-tomcat-9.0.53/bin/startup.sh'",
-    "e2e-test": "./scripts/run-e2e-tests.sh"
+    "test:e2e": "./scripts/run-e2e-tests.sh"
   },
   "devDependencies": {
     "@types/node": "^22.15.18",

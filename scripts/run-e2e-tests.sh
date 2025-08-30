@@ -9,4 +9,4 @@ if [ $? -ne 0 ]; then
 fi
 
 echo "Running Playwright E2E tests with 1Password integration..."
-op run -- npm exec playwright test e2e/login.test.ts
+op run -- npm exec playwright test e2e/
