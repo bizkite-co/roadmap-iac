@@ -1,0 +1,14 @@
+# Configuration for E2E Tests
+
+[user]
+email = "user@example.com"
+username = "testUsername"
+password = "your-password"
+
+[s3]
+bucketName = "higginbotham-prs-logs"
+region = "us-west-1"
+
+[settings]
+# Environment can be 'dev', 'uat', or 'prod'
+env = "dev"

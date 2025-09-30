@@ -1,65 +1,103 @@
 import { test, expect } from '@playwright/test';
 import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
 import * as fs from 'fs';
+import * as path from 'path';
+import { config } from './config.loader';
 
-const bucketName = 'higginbotham-prs-logs';
-const bucketPath = 'test-snapshots';
+const s3Client = new S3Client({ region: config.s3.region });
 
-const baseUrl = 'http://localhost:8080/roadmap'; // Target local dev server
+test.describe('Forgot Password E2E Test Suite', () => {
+  let consoleLogs: string[] = [];
+  let networkLogs: { url: string; status: number; method: string }[] = [];
 
-const s3Client = new S3Client({ region: 'us-west-1' }); // Hardcode region for local testing
+  test.beforeEach(async ({ page }) => {
+    consoleLogs = [];
+    networkLogs = [];
 
-test('Forgot Password E2E Test', async ({ page }) => {
+    page.on('console', message => {
+      consoleLogs.push(`[Console ${message.type()}] ${message.text()}`);
+    });
 
-  const forgotPasswordPath = '/forgotPassword'; // Assuming this path based on common patterns
-  const testUserEmail = 'test@example.com'; // Placeholder: Replace with an actual test user email from DB
+    page.on('request', request => {
+      networkLogs.push({ url: request.url(), method: request.method(), status: 0 }); // Status will be updated by response
+    });
 
-  // 1. Navigate to the "Forgot Password" form
-  const forgotPasswordUrl = `${baseUrl}${forgotPasswordPath}`;
-    console.log(`Navigating to: ${forgotPasswordUrl}`);
-  try {
-    const response = await page.goto(forgotPasswordUrl);
-    expect(response?.status()).toBe(200);
-  } catch (error: any) {
-    console.error(`Navigation to ${forgotPasswordUrl} failed: ${error.message}`);
-    throw new Error(`Failed to navigate to ${forgotPasswordUrl}: ${error.message}`);
-  }
+    page.on('response', async response => {
+      const index = networkLogs.findIndex(log => log.url === response.url() && log.method === response.request().method());
+      if (index !== -1) {
+        networkLogs[index].status = response.status();
+      } else {
+        networkLogs.push({ url: response.url(), method: response.request().method(), status: response.status() });
+      }
+    });
+  });
 
-  // 2. Fill out the form with a test user's email
-  await page.locator('input[name="email"]').fill(testUserEmail);
+  test.afterEach(async ({ page }, testInfo) => {
+    if (testInfo.status !== testInfo.expectedStatus) {
+      console.error(`\n--- Test Failed: ${testInfo.title} ---`);
+      console.error('Console Logs:');
+      consoleLogs.forEach(log => console.error(log));
+      console.error('\nNetwork Logs:');
+      networkLogs.forEach(log => console.error(`[${log.method}] ${log.url} - ${log.status}`));
+      console.error('-----------------------------------\n');
+    }
+  });
 
-  // 3. Submit the form
-  await page.locator('button[type="submit"]').click(); // Assuming a submit button
+  test('Forgot Password Flow', async ({ page }) => {
 
-  // 4. Verify a success message or redirection (adjust as per actual application behavior)
-  // For now, we'll just check for a generic success message or URL change.
-  // A more robust check would involve looking for specific text on the page or a redirect.
-  await expect(page.locator('text=Password reset instructions sent')).toBeVisible(); // Placeholder assertion
+    const forgotPasswordPath = '/roadmap/forgotPassword';
 
-  // 5. Verify that the user's password was reset and the Password_reset flag is set to 1 in the database.
-  // This step requires direct database access, which will be handled outside of Playwright.
-  // Placeholder for DB verification:
-  console.log(`TODO: Verify database for user ${testUserEmail} to confirm password reset and Password_reset flag.`);
+    // 1. Navigate to the "Forgot Password" form
+    console.log(`Navigating to: ${forgotPasswordPath}`);
+    try {
+      const response = await page.goto(forgotPasswordPath, { waitUntil: 'networkidle' }); // Wait for network to be idle
+      expect(response?.status()).toBe(200);
+    } catch (error: any) {
+      console.error(`Navigation to ${forgotPasswordPath} failed: ${error.message}`);
+      throw new Error(`Failed to navigate to ${forgotPasswordPath}: ${error.message}`);
+    }
 
-  // Take screenshot
-  const screenshot = await page.screenshot();
-  const filename = `forgot-password-test-${Date.now()}.png`;
-  const filePath = `${bucketPath}/${filename}`;
+    // Ensure the email input field is visible and ready before filling
+    const emailInputLocator = page.locator('form#recover input[name="email"]');
+    await emailInputLocator.waitFor({ state: 'visible' });
 
-  // Upload screenshot to S3
-  try {
-    const uploadParams = {
-      Bucket: bucketName,
-      Key: filePath,
-      Body: screenshot,
-      ContentType: 'image/png',
-    };
+    // 2. Fill out the form with a test user's email
+    await emailInputLocator.fill(config.user.email);
 
-    const command = new PutObjectCommand(uploadParams);
-    await s3Client.send(command);
+    // 3. Submit the form
+    await page.locator('input[type="submit"][name="recover"]').click(); // Corrected locator for submit button
 
-    console.log(`Screenshot uploaded to s3://${bucketName}/${filePath}`);
-  } catch (error) {
-    console.error('Error uploading screenshot to S3:', error);
-  }
+    console.log('--- Forgot Password Page Content After Submit ---');
+    console.log(await page.content());
+
+    // 4. Verify a success message or redirection (adjust as per actual application behavior)
+    await expect(page.locator('body', { hasText: 'Recovery email sent!' })).toBeVisible();
+
+    // 5. Verify that the user's password was reset and the Password_reset flag is set to 1 in the database.
+    console.log(`TODO: Verify database for user ${config.user.email} to confirm password reset and Password_reset flag.`);
+
+    // Take screenshot
+    const screenshot = await page.screenshot();
+    const s3PathFile = path.resolve(__dirname, 's3path.txt');
+    const s3BasePath = fs.readFileSync(s3PathFile, 'utf-8');
+    const filename = `forgot-password-test-${Date.now()}.png`;
+    const filePath = `${s3BasePath}/${filename}`;
+
+    // Upload screenshot to S3
+    try {
+      const uploadParams = {
+        Bucket: config.s3.bucketName,
+        Key: filePath,
+        Body: screenshot,
+        ContentType: 'image/png',
+      };
+
+      const command = new PutObjectCommand(uploadParams);
+      await s3Client.send(command);
+
+      console.log(`Screenshot uploaded to s3://${config.s3.bucketName}/${filePath}`);
+    } catch (error) {
+      console.error('Error uploading screenshot to S3:', error);
+    }
+  });
 });

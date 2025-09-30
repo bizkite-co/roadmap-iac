@@ -4,7 +4,7 @@
 To implement daily scheduled E2E tests for the `roadmap-website` app, running on the live site, capturing screenshots, and uploading them to an S3 bucket, with secure credential management using 1Password and AWS Secrets Manager.
 
 ### **Current Understanding**
-*   **E2E Tests:** Playwright tests (`e2e/login.test.ts`) written in TypeScript, using `@aws-sdk/client-s3` for screenshot uploads. They rely on `stack.config.json` for URLs and `ROADMAP_USERNAME`, `ROADMAP_PASSWORD` environment variables for login.
+*   **E2E Tests:** Playwright tests (`e2e/login.test.ts`, `e2e/forgot-password.test.ts`) written in TypeScript, using `@aws-sdk/client-s3` for screenshot uploads. They rely on `stack.config.json` for URLs and `ROADMAP_USERNAME`, `ROADMAP_PASSWORD` environment variables for login.
 *   **Configuration:** `stack.config.json` provides environment-specific URLs and cron schedules for E2E tests.
 *   **CDK:** An existing CDK application (`bin/auto-start-stop-ec2.ts`) manages EC2 instances, but a new CDK stack will be needed for E2E test scheduling. The `package.json` indicates a Node/TypeScript environment for CDK.
 *   **Credentials:** 1Password will be used for `ROADMAP_USERNAME` and `ROADMAP_PASSWORD` (provided as `"op://Private/Roadmappartners/username"` and `"op://Private/Roadmappartners/password"`). AWS credentials for CDK deployment are assumed to be configured locally.

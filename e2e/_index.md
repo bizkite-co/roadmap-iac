@@ -12,6 +12,20 @@ The e2e tests should run every weekday morning at 04:00 PDT
 
 Before these tests are deployed in the CDK to run automatically on the schedule, we have to be able to run each at will locally against the Dev environment. We should also be able to run them locally against the PROD environment.
 
+## Local Data
+
+```mysql
+mysql> select user_id, username, email, first_name, last_name from users where user_id = 727;
++---------+-----------+---------------------+------------+-----------+
+| user_id | username  | email               | first_name | last_name |
++---------+-----------+---------------------+------------+-----------+
+|     727 | test-user | mark@getbizkite.com | Test       | Test      |
++---------+-----------+---------------------+------------+-----------+
+1 row in set (0.01 sec)
+```
+
+The current local test user is a temporary solution. Once we create the tests for "Add User" and "Remove User" we will be able to create a user for each test that needs a user. This pre-populated test user allows us to avoid that step for a little while.
+
 ## Screenshots and Record
 
 * Every page result should be screenshotted.
@@ -21,9 +35,9 @@ Before these tests are deployed in the CDK to run automatically on the schedule,
 ## Needed Tests
 
 * [X] ~~*Login*~~ [2025-08-28]
-  * [ ] **Forgot Password**
-    * [ ] Fill out form with test user from DB.
-    * [ ] Verify that the users password was reset and `Password_reset` == 1 in the DB.
+  * [X] ~~**Forgot Password**~~ [2025-08-31]
+    * [X] ~~Fill out form with test user from DB.~~
+    * [X] ~~Verify that the users password was reset and `Password_reset` == 1 in the DB.~~
   * [ ] Forgot Username
 * [ ] Home
 * [ ] About Us
@@ -39,7 +53,7 @@ Before these tests are deployed in the CDK to run automatically on the schedule,
   * [ ] RTA Training/Welcome
   * [ ] **College Planner**
     * [ ] Fill in two children's data.
-    * [ ] Press **Calculate**
+    * [ ] Press Calculate
     * [ ] Check that both children's data appears
     * [ ] Check that the combined summary data appears
   * [ ] Cash Flow
