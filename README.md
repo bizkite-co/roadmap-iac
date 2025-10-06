@@ -81,6 +81,10 @@ Some infrastructure, such as Route53 domains and DNS management features have be
         $ cdk deploy
         ```
 
+# E2E Test Infrastructure
+
+For detailed information on setting up, configuring, and deploying the E2E test infrastructure, please refer to the [E2E Test Infrastructure Documentation](docs/e2e-tests.md).
+
 # Test
 
 ## Lambda function

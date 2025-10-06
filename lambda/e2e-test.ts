@@ -3,7 +3,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
 import { SNSClient, PublishCommand } from '@aws-sdk/client-sns';
-import { S3Client, PutObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
 
 interface LambdaEvent {}
 interface LambdaContext {}
@@ -21,50 +21,27 @@ export async function handler(event: LambdaEvent, context: LambdaContext) {
   const tmpDir = '/tmp/repo';
   const playwrightReportDir = path.join(tmpDir, 'playwright-report');
   let testPassed = false;
+  let reportKeyPrefix = '';
+  let finalReportUrl = '';
 
   try {
-    // Clean and create temporary directory
-    console.log('Cleaning up /tmp/repo...');
-    execSync(`rm -rf ${tmpDir}`);
-    execSync(`mkdir -p ${tmpDir}`);
+    // Generate a unique prefix for this report run
+    const now = new Date();
+    const dateStamp = now.toISOString().split('T')[0]; // YYYY-MM-DD
+    const timeStamp = now.toTimeString().split(' ')[0].replace(/:/g, '-'); // HH-MM-SS
+    reportKeyPrefix = `reports/${dateStamp}/${timeStamp}`;
 
-    // Clone the repository
-    console.log(`Cloning repository: ${GIT_REPO_URL}`);
-    execSync(`git clone ${GIT_REPO_URL} ${tmpDir}`);
+    await setupEnvironment(tmpDir, GIT_REPO_URL);
 
-    // Fetch credentials from Secrets Manager
-    console.log(`Fetching secret: ${SECRET_NAME}`);
-    const password = await getSecret(SECRET_NAME);
+    const playwrightEnv = await getPlaywrightEnv(SECRET_NAME, REPORTS_BUCKET_NAME);
 
-    // Prepare environment variables for Playwright
-    const playwrightEnv = {
-      ...process.env, // Inherit existing Lambda environment variables
-      E2E_USER_EMAIL: "mark@bizkite.net", // Hardcoded for now, could be from Secrets Manager
-      E2E_USER_USERNAME: "appdev", // Hardcoded for now, could be from Secrets Manager
-      E2E_USER_PASSWORD: password,
-      E2E_S3_BUCKETNAME: REPORTS_BUCKET_NAME,
-      E2E_S3_REGION: process.env.AWS_REGION || 'us-west-1', // Default to us-west-1 if not set
-      E2E_ENV: "dev", // Hardcoded for now, could be from CDK context
-    };
+    await installDependencies(tmpDir, playwrightEnv);
 
-    // Install dependencies
-    console.log('Installing npm dependencies...');
-    execSync('npm install', { cwd: tmpDir, stdio: 'inherit', env: playwrightEnv });
-
-    // Run the tests and generate HTML report
-    console.log('Running E2E tests and generating HTML report...');
-    try {
-      execSync(`npm exec playwright -- test e2e/ --output=${playwrightReportDir} --reporter=html`, { cwd: tmpDir, stdio: 'inherit', env: playwrightEnv });
-      testPassed = true;
-      console.log('E2E tests passed successfully!');
-    } catch (testError: any) {
-      console.error(`E2E tests failed: ${testError.message || testError}`);
-      throw testError; // Re-throw to be caught by outer catch block
-    }
+    testPassed = await runPlaywrightTests(tmpDir, playwrightReportDir, playwrightEnv);
 
     return {
       statusCode: 200,
-      body: JSON.stringify('E2E tests passed successfully!'),
+      body: JSON.stringify(testPassed ? 'E2E tests passed successfully!' : 'E2E tests failed.'),
     };
   } catch (error: any) {
     console.error(`An error occurred during test execution: ${error.message || error}`);
@@ -74,18 +51,67 @@ export async function handler(event: LambdaEvent, context: LambdaContext) {
       body: JSON.stringify(`E2E test failed: ${error.message || error}`),
     };
   } finally {
-    // Always upload reports, regardless of test success or failure
-    if (fs.existsSync(playwrightReportDir)) {
-      console.log(`Uploading Playwright report from ${playwrightReportDir} to s3://${REPORTS_BUCKET_NAME}...`);
-      await uploadDirectoryToS3(playwrightReportDir, REPORTS_BUCKET_NAME);
-      const reportUrl = `http://${REPORTS_BUCKET_NAME}.s3-website.${process.env.AWS_REGION}.amazonaws.com/`;
-      console.log(`Playwright report available at: ${reportUrl}`);
-      if (!testPassed) {
-        await sendSnsNotification(`E2E test execution failed. Report available at: ${reportUrl}`);
-      }
-    } else {
-      console.log('Playwright report directory not found, skipping upload.');
+    await uploadReports(playwrightReportDir, REPORTS_BUCKET_NAME, reportKeyPrefix, testPassed, finalReportUrl);
+  }
+}
+
+// Helper Functions
+
+async function setupEnvironment(tmpDir: string, gitRepoUrl: string): Promise<void> {
+  console.log('Cleaning up /tmp/repo...');
+  execSync(`rm -rf ${tmpDir}`);
+  execSync(`mkdir -p ${tmpDir}`);
+
+  console.log(`Cloning repository: ${gitRepoUrl}`);
+  execSync(`git clone ${gitRepoUrl} ${tmpDir}`);
+}
+
+async function getPlaywrightEnv(secretName: string, reportsBucketName: string): Promise<NodeJS.ProcessEnv> {
+  console.log(`Fetching secret: ${secretName}`);
+  const password = await getSecret(secretName);
+
+  return {
+    ...process.env, // Inherit existing Lambda environment variables
+    E2E_USER_EMAIL: "mark@bizkite.net", // Hardcoded for now, could be from Secrets Manager
+    E2E_USER_USERNAME: "appdev", // Hardcoded for now, could be from Secrets Manager
+    E2E_USER_PASSWORD: password,
+    E2E_S3_BUCKETNAME: reportsBucketName,
+    E2E_S3_REGION: process.env.AWS_REGION || 'us-west-1', // Default to us-west-1 if not set
+    E2E_ENV: "dev", // Hardcoded for now, could be from CDK context
+  };
+}
+
+async function installDependencies(tmpDir: string, env: NodeJS.ProcessEnv): Promise<void> {
+  console.log('Installing npm dependencies...');
+  execSync('npm install', { cwd: tmpDir, stdio: 'inherit', env: env });
+}
+
+async function runPlaywrightTests(tmpDir: string, playwrightReportDir: string, env: NodeJS.ProcessEnv): Promise<boolean> {
+  console.log('Running E2E tests and generating HTML report...');
+  try {
+    execSync(`npm exec playwright -- test e2e/ --output=${playwrightReportDir} --reporter=html`, { cwd: tmpDir, stdio: 'inherit', env: env });
+    console.log('E2E tests passed successfully!');
+    return true;
+  } catch (testError: any) {
+    console.error(`E2E tests failed: ${testError.message || testError}`);
+    return false;
+  }
+}
+
+async function uploadReports(playwrightReportDir: string, reportsBucketName: string, reportKeyPrefix: string, testPassed: boolean, finalReportUrl: string): Promise<void> {
+  if (fs.existsSync(playwrightReportDir)) {
+    console.log(`Uploading Playwright report from ${playwrightReportDir} to s3://${reportsBucketName}/${reportKeyPrefix}...`);
+    await uploadDirectoryToS3(playwrightReportDir, reportsBucketName, reportKeyPrefix);
+    finalReportUrl = `http://${reportsBucketName}.s3-website.${process.env.AWS_REGION}.amazonaws.com/${reportKeyPrefix}/index.html`;
+    console.log(`Playwright report available at: ${finalReportUrl}`);
+
+    await updateReportsIndex(reportsBucketName, reportKeyPrefix, testPassed, finalReportUrl);
+
+    if (!testPassed) {
+      await sendSnsNotification(`E2E test execution failed. Report available at: ${finalReportUrl}`);
     }
+  } else {
+    console.log('Playwright report directory not found, skipping upload.');
   }
 }
 
@@ -95,12 +121,62 @@ async function getSecret(secretName: string): Promise<string> {
     const response = await secretsManagerClient.send(command);
     if (response.SecretString) {
       return response.SecretString;
-    } else {
-      throw new Error('SecretString not found in response.');
     }
+    throw new Error('SecretString not found in response.');
   } catch (error: any) {
     console.error(`Failed to retrieve secret '${secretName}': ${error.message}`);
     throw error;
+  }
+}
+
+interface ReportEntry {
+  timestamp: string;
+  status: string;
+  reportPath: string;
+  reportUrl: string;
+  // Add other metadata like duration, browser, etc. if needed
+}
+
+async function updateReportsIndex(bucketName: string, reportKeyPrefix: string, passed: boolean, reportUrl: string): Promise<void> {
+  const indexKey = 'reports-index.json';
+  let reports: ReportEntry[] = [];
+
+  try {
+    const { Body } = await s3Client.send(new GetObjectCommand({
+      Bucket: bucketName,
+      Key: indexKey,
+    }));
+    if (Body) {
+      const content = await Body.transformToString();
+      reports = JSON.parse(content);
+    }
+  } catch (error: any) {
+    if (error.name === 'NoSuchKey') {
+      console.log(`'${indexKey}' not found. Creating new index.`);
+    } else {
+      console.error(`Error reading '${indexKey}': ${error.message}`);
+    }
+  }
+
+  const newEntry: ReportEntry = {
+    timestamp: new Date().toISOString(),
+    status: passed ? 'Passed' : 'Failed',
+    reportPath: `${reportKeyPrefix}/index.html`,
+    reportUrl: reportUrl,
+  };
+
+  reports.unshift(newEntry); // Add new entry to the beginning
+
+  try {
+    await s3Client.send(new PutObjectCommand({
+      Bucket: bucketName,
+      Key: indexKey,
+      ContentType: 'application/json',
+      Body: JSON.stringify(reports, null, 2),
+    }));
+    console.log(`Updated '${indexKey}' in s3://${bucketName}`);
+  } catch (error: any) {
+    console.error(`Error writing '${indexKey}': ${error.message}`);
   }
 }
 
