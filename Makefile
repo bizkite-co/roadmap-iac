@@ -8,24 +8,10 @@ help: ## Display this help screen
 # Application Tasks
 # ==============================================================================
 
-.PHONY: test
-test: check-auth ## Run e2e tests locally
-	@op run -- npm exec playwright -- test e2e/ --reporter=list
+.PHONY: deploy
+deploy: ## Deploy the E2E test stack to AWS
+	cdk deploy RoadmapE2ETestStack
 
-check-auth: ## Abort if not signed in to 1Password CLI
-	@echo "Checking 1Password CLI authentication..."
-	@if ! op whoami > /dev/null 2>&1; then \
-		echo "\033[31mError: Not signed in to 1Password. Please run 'op signin' in your terminal.\033[0m"; \
-		exit 1; \
-	fi
-
-.PHONY: signin
-signin: ## Interactive: Sign in to 1Password CLI
-	@echo "Please follow the prompts to sign in to 1Password CLI..."
-	@eval $$(op signin)
-
-.PHONY: whoami ## Check 1Password CLI sign-in status
-	@echo "Checking 1Password CLI sign-in status..."
-	@op whoami
-
-
+.PHONY: update-e2e-secret
+update-e2e-secret: ## Create or update the E2E test secret in AWS Secrets Manager using 1Password
+	./scripts/update-e2e-secret.sh
