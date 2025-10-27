@@ -35,7 +35,8 @@
     "uat-stop": "./uat_control.sh stop",
     "deploy-uat-manual": "./scripts/deploy_uat_manual.sh",
     "start:prod": " ssh $prod 'sudo /opt/tomcat/apache-tomcat-9.0.53/bin/startup.sh'",
-    "test:e2e": "./scripts/run-e2e-tests.sh"
+    "test:e2e": "./scripts/run-e2e-tests.sh",
+    "build:lambda": "npm install --prefix lambda && tsc -p lambda/tsconfig.json"
   },
   "devDependencies": {
     "@types/node": "^20.0.0"

@@ -8,10 +8,41 @@ help: ## Display this help screen
 # Application Tasks
 # ==============================================================================
 
+.PHONY: install
+install: ## Run NPM install
+	@npm install
+
+.PHONY: synth
+synth: ## cdk synth
+	@cdk synth
+
 .PHONY: deploy
-deploy: ## Deploy the E2E test stack to AWS
+deploy: synth ## Deploy the E2E test stack to AWS
 	cdk deploy RoadmapE2ETestStack
 
 .PHONY: update-e2e-secret
 update-e2e-secret: ## Create or update the E2E test secret in AWS Secrets Manager using 1Password
 	./scripts/update-e2e-secret.sh
+
+.PHONY: get-e2e-results
+get-e2e-results: ## Get the last 3 E2E test results
+	@./scripts/get-e2e-results.sh
+
+.PHONY: get-e2e-logs
+get-e2e-logs: ## Get the logs for the E2E test runner lambda
+	@./scripts/get-e2e-logs.sh
+
+.PHONY: run-schedule
+run-schedule: ## Update the E2E test schedule to run in 30 seconds
+	@./scripts/run-schedule.sh
+
+.PHONY: list-schedules
+list-schedules: ## List the E2E test schedules
+	@./scripts/list-schedules.sh
+
+.PHONY: list-runs
+list-runs: ## List the last 10 runs of the E2E test lambda
+	@FUNCTION_NAME=$$(aws cloudformation describe-stack-resources --stack-name RoadmapE2ETestStack --logical-resource-id E2ETestRunnerLambda --query 'StackResources[0].PhysicalResourceId' --output text); \
+	LOG_GROUP_NAME="/aws/lambda/$${FUNCTION_NAME}"; \
+	echo "Fetching recent runs for $${FUNCTION_NAME}..."; \
+	aws logs filter-log-events --log-group-name $${LOG_GROUP_NAME} --filter-pattern "START RequestId" --limit 10 --query 'events[].{Timestamp:strftime(`%Y-%m-%d %H:%M:%S`, from_millis(timestamp)), Message:message}' --output table
