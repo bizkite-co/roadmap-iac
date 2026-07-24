@@ -1,4 +1,4 @@
-import { Stack, StackProps, Duration, RemovalPolicy, CfnOutput, DockerImage } from 'aws-cdk-lib';
+import { Stack, StackProps, Duration, RemovalPolicy, CfnOutput } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
 import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as events from 'aws-cdk-lib/aws-events';
@@ -7,12 +7,15 @@ import * as iam from 'aws-cdk-lib/aws-iam';
 import * as sns from 'aws-cdk-lib/aws-sns';
 import * as secretsmanager from 'aws-cdk-lib/aws-secretsmanager';
 import * as s3 from 'aws-cdk-lib/aws-s3';
-import { execSync } from 'child_process';
+import * as logs from 'aws-cdk-lib/aws-logs';
+import { ResourceNames } from './resource-names';
+import fs = require('fs');
+import { Schema } from 'effect';
+import { StackConfigSchema } from './config-schema';
 
 interface E2ETestStackProps extends StackProps {
-  gitRepoUrl: string; // This will now be unused, but we'll leave it to avoid breaking the interface
+  gitRepoUrl: string; 
   secretName: string;
-  snsTopicArn: string;
   scheduleExpression: string;
   reportsBucketPrefix: string;
 }
@@ -21,9 +24,14 @@ export class E2ETestStack extends Stack {
   constructor(scope: Construct, id: string, props: E2ETestStackProps) {
     super(scope, id, props);
 
+    const rawConfig = JSON.parse(fs.readFileSync('stack.config.json', {encoding: 'utf-8'}));
+    const stackConfig = Schema.decodeSync(StackConfigSchema)(rawConfig);
+
+    const names = new ResourceNames(this.node.tryGetContext('environment') || 'prod');
+
     // S3 Bucket for Playwright HTML Reports and all test artifacts
     const reportsBucket = new s3.Bucket(this, 'E2ETestReportsBucket', {
-      bucketName: `${props.reportsBucketPrefix}-${this.account}-${this.region}`.toLowerCase(),
+      bucketName: `${names.e2eTestStack.s3Bucket}-${this.account}-${this.region}`.toLowerCase(),
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
       removalPolicy: RemovalPolicy.DESTROY,
       autoDeleteObjects: true,
@@ -31,36 +39,29 @@ export class E2ETestStack extends Stack {
       websiteErrorDocument: 'index.html',
     });
 
+    // Create a new SNS Topic for notifications
+    const topic = new sns.Topic(this, 'E2ETestTopic', {
+      displayName: 'E2E Test Failure Notifications',
+      topicName: names.e2eTestStack.snsTopic,
+    });
+
     // Define the Lambda function for running E2E tests
     const e2eTestLambda = new lambda.Function(this, 'E2ETestRunnerLambda', {
+      functionName: names.e2eTestStack.lambdaFunction, // Explicitly named Lambda function
       runtime: lambda.Runtime.NODEJS_22_X,
       handler: 'index.handler',
-      // Asset root is the entire project, to give bundling access to the symlink
-      code: lambda.Code.fromAsset('.', {
-        // Ignore bulky folders at the root
-        exclude: ['.git', 'cdk.out', '.venv', 'node_modules'],
-        bundling: {
-          image: DockerImage.fromRegistry('public.ecr.aws/sam/build-nodejs22.x'),
-          // We are at project root. We need to work inside the 'lambda' directory.
-          workingDirectory: '/asset-input/lambda',
-          command: [
-            'bash', '-c',
-            [
-              'npm install',
-              'npm run build',
-              // Copy the built lambda code and its node_modules to the output
-              'cp -r . /asset-output',
-              // Now, from the output dir, copy the e2e tests from the project root's symlink
-              'cp -rL /asset-input/roadmap-website/e2e /asset-output/e2e'
-            ].join(' && ')
-          ],
-        },
+      // This simply zips the lambda directory. Assumes node_modules and e2e tests are present.
+      code: lambda.Code.fromAsset('lambda', { exclude: ['.gitkeep'] }), 
+      logGroup: new logs.LogGroup(this, 'E2ETestRunnerLogGroup', {
+        logGroupName: names.e2eTestStack.logGroup, // Adhere to AWS Lambda log group naming convention
+        retention: logs.RetentionDays.ONE_MONTH,
+        removalPolicy: RemovalPolicy.DESTROY,
       }),
       timeout: Duration.minutes(10),
       memorySize: 1024,
       environment: {
         SECRET_NAME: props.secretName,
-        SNS_TOPIC_ARN: props.snsTopicArn,
+        SNS_TOPIC_ARN: topic.topicArn, // Use the new topic
         REPORTS_BUCKET_NAME: reportsBucket.bucketName,
       },
     });
@@ -72,34 +73,47 @@ export class E2ETestStack extends Stack {
       resources: [secretsmanager.Secret.fromSecretNameV2(this, 'E2ETestSecret', props.secretName).secretArn],
     }));
 
-    // 2. Allow publishing to SNS topic
-    e2eTestLambda.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['sns:Publish'],
-      resources: [props.snsTopicArn],
-    }));
+    // 2. Allow publishing to the new SNS topic
+    topic.grantPublish(e2eTestLambda);
 
     // 3. Allow read/write to the reports bucket
     reportsBucket.grantReadWrite(e2eTestLambda);
 
     // Define an EventBridge rule to trigger the Lambda on a schedule
     new events.Rule(this, 'E2ETestSchedule', {
-      ruleName: 'roadmap-e2e-regular-schedule',
-      schedule: events.Schedule.expression(props.scheduleExpression),
+      ruleName: names.e2eTestStack.scheduleRule,
+      schedule: events.Schedule.expression('cron(0 1 * * ? *)'),
       targets: [new targets.LambdaFunction(e2eTestLambda)],
     });
 
     // Define a new rule for debugging, disabled by default
     new events.Rule(this, 'E2EDebugSchedule', {
-      ruleName: 'roadmap-e2e-debug-schedule',
+      ruleName: names.e2eTestStack.debugScheduleRule,
       schedule: events.Schedule.expression('cron(0 0 1 1 ? 1970)'), // A date in the past
       targets: [new targets.LambdaFunction(e2eTestLambda)],
       enabled: false,
     });
 
-    // Output the URL of the reports bucket for easy access
+    // --- Stack Outputs ---
+
     new CfnOutput(this, 'E2EReportsBucketWebsiteUrl', {
       value: reportsBucket.bucketWebsiteUrl,
       description: 'URL for the E2E test reports static website',
+    });
+
+    new CfnOutput(this, 'E2EReportsBucketConsoleUrl', {
+      value: `https://s3.console.aws.amazon.com/s3/buckets/${reportsBucket.bucketName}?region=${this.region}`,
+      description: 'Direct link to the S3 bucket in the AWS Console',
+    });
+
+    new CfnOutput(this, 'E2ELambdaLogGroupConsoleUrl', {
+      value: `https://console.aws.amazon.com/cloudwatch/home?region=${this.region}#logsV2:log-groups/log-group/${names.e2eTestStack.logGroup.replace(/\//g, '$252F')}`,
+      description: 'Direct link to the Lambda function\'s log group in the AWS Console',
+    });
+
+    new CfnOutput(this, 'SNSTopicArn', {
+      value: topic.topicArn,
+      description: 'ARN of the new SNS topic for notifications',
     });
   }
 }

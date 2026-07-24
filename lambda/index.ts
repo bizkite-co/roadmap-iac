@@ -1,27 +1,25 @@
-import { execSync } from 'child_process';
-import * as fs from 'fs';
-import * as path from 'path';
-import { SecretsManagerClient, GetSecretValueCommand } from '@aws-sdk/client-secrets-manager';
-import { SNSClient, PublishCommand } from '@aws-sdk/client-sns';
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+// This comment is added to force CDK to detect a change and re-bundle the Lambda asset.
+const { execSync } = require('child_process');
+const fs = require('fs');
+const path = require('path');
+const { SecretsManagerClient, GetSecretValueCommand } = require('@aws-sdk/client-secrets-manager');
+const { SNSClient, PublishCommand } = require('@aws-sdk/client-sns');
+const { S3Client, PutObjectCommand, GetObjectCommand } = require('@aws-sdk/client-s3');
+const { getSignedUrl } = require('@aws-sdk/s3-request-presigner');
 
-interface LambdaEvent {}
-interface LambdaContext {}
-
-const SECRET_NAME = process.env.SECRET_NAME!;
+const SECRET_NAME = process.env.SECRET_NAME;
 const SNS_TOPIC_ARN = process.env.SNS_TOPIC_ARN;
-const REPORTS_BUCKET_NAME = process.env.REPORTS_BUCKET_NAME!;
+const REPORTS_BUCKET_NAME = process.env.REPORTS_BUCKET_NAME;
 
 const secretsManagerClient = new SecretsManagerClient({});
 const snsClient = new SNSClient({});
 const s3Client = new S3Client({});
 
-export async function handler(event: LambdaEvent, context: LambdaContext) {
-  const taskRoot = process.cwd();
+exports.handler = async function(event, context) {
+  const taskRoot = process.cwd(); // The root of the Lambda function's deployed code
   const playwrightReportDir = path.join(taskRoot, 'playwright-report');
   let testPassed = false;
   let reportKeyPrefix = '';
-  let finalReportUrl = '';
 
   try {
     const now = new Date();
@@ -31,13 +29,14 @@ export async function handler(event: LambdaEvent, context: LambdaContext) {
 
     const playwrightEnv = await getPlaywrightEnv(SECRET_NAME, REPORTS_BUCKET_NAME);
 
+    // No need for setupEnvironment or installDependencies, as code is bundled
     testPassed = await runPlaywrightTests(taskRoot, playwrightReportDir, playwrightEnv);
 
     return {
       statusCode: 200,
       body: JSON.stringify(testPassed ? 'E2E tests passed successfully!' : 'E2E tests failed.'),
     };
-  } catch (error: any) {
+  } catch (error) {
     console.error(`An error occurred during test execution: ${error.message || error}`);
     await sendSnsNotification(`E2E test execution failed.\n\nDetails:\n${error.message || error}\n\nStdout:\n${error.stdout?.toString() || ''}\n\nStderr:\n${error.stderr?.toString() || ''}`);
     return {
@@ -45,13 +44,11 @@ export async function handler(event: LambdaEvent, context: LambdaContext) {
       body: JSON.stringify(`E2E test failed: ${error.message || error}`),
     };
   } finally {
-    await uploadReports(playwrightReportDir, REPORTS_BUCKET_NAME, reportKeyPrefix, testPassed, finalReportUrl);
+    await uploadReports(playwrightReportDir, REPORTS_BUCKET_NAME, reportKeyPrefix, testPassed);
   }
 }
 
-// Helper Functions
-
-async function getPlaywrightEnv(secretName: string, reportsBucketName: string): Promise<NodeJS.ProcessEnv> {
+async function getPlaywrightEnv(secretName, reportsBucketName) {
   console.log(`Fetching secret: ${secretName}`);
   const password = await getSecret(secretName);
 
@@ -66,36 +63,45 @@ async function getPlaywrightEnv(secretName: string, reportsBucketName: string): 
   };
 }
 
-async function runPlaywrightTests(taskRoot: string, playwrightReportDir: string, env: NodeJS.ProcessEnv): Promise<boolean> {
+async function runPlaywrightTests(taskRoot, playwrightReportDir, env) {
   console.log('Running E2E tests and generating HTML report...');
   try {
-    execSync(`npm exec playwright -- test e2e/ --output=${playwrightReportDir} --reporter=html`, { stdio: 'inherit', env: env });
+    // Playwright tests are now in a bundled 'e2e/' directory relative to taskRoot
+    execSync(`npm exec playwright -- test e2e/ --output=${playwrightReportDir} --reporter=html`, { cwd: taskRoot, stdio: 'inherit', env: env });
     console.log('E2E tests passed successfully!');
     return true;
-  } catch (testError: any) {
+  } catch (testError) {
     console.error(`E2E tests failed: ${testError.message || testError}`);
     return false;
   }
 }
 
-async function uploadReports(playwrightReportDir: string, reportsBucketName: string, reportKeyPrefix: string, testPassed: boolean, finalReportUrl: string): Promise<void> {
+async function uploadReports(playwrightReportDir, reportsBucketName, reportKeyPrefix, testPassed) {
   if (fs.existsSync(playwrightReportDir)) {
     console.log(`Uploading Playwright report from ${playwrightReportDir} to s3://${reportsBucketName}/${reportKeyPrefix}...`);
     await uploadDirectoryToS3(playwrightReportDir, reportsBucketName, reportKeyPrefix);
-    finalReportUrl = `http://${reportsBucketName}.s3-website.${process.env.AWS_REGION}.amazonaws.com/${reportKeyPrefix}/index.html`;
-    console.log(`Playwright report available at: ${finalReportUrl}`);
 
-    await updateReportsIndex(reportsBucketName, reportKeyPrefix, testPassed, finalReportUrl);
+    const reportIndexKey = path.join(reportKeyPrefix, 'index.html');
+
+    const signedUrl = await getSignedUrl(
+        s3Client,
+        new GetObjectCommand({ Bucket: reportsBucketName, Key: reportIndexKey }),
+        { expiresIn: 3600 } // URL expires in 1 hour
+    );
+    
+    console.log(`Playwright report available at secure pre-signed URL (valid for 1 hour): ${signedUrl}`);
+
+    await updateReportsIndex(reportsBucketName, reportKeyPrefix, testPassed, signedUrl);
 
     if (!testPassed) {
-      await sendSnsNotification(`E2E test execution failed. Report available at: ${finalReportUrl}`);
+      await sendSnsNotification(`E2E test execution failed. Secure report link (valid for 1 hour): ${signedUrl}`);
     }
   } else {
     console.log('Playwright report directory not found, skipping upload.');
   }
 }
 
-async function getSecret(secretName: string): Promise<string> {
+async function getSecret(secretName) {
   try {
     const command = new GetSecretValueCommand({ SecretId: secretName });
     const response = await secretsManagerClient.send(command);
@@ -103,22 +109,15 @@ async function getSecret(secretName: string): Promise<string> {
       return response.SecretString;
     }
     throw new Error('SecretString not found in response.');
-  } catch (error: any) {
+  } catch (error) {
     console.error(`Failed to retrieve secret '${secretName}': ${error.message}`);
     throw error;
   }
 }
 
-interface ReportEntry {
-  timestamp: string;
-  status: string;
-  reportPath: string;
-  reportUrl: string;
-}
-
-async function updateReportsIndex(bucketName: string, reportKeyPrefix: string, passed: boolean, reportUrl: string): Promise<void> {
+async function updateReportsIndex(bucketName, reportKeyPrefix, passed, reportUrl) {
   const indexKey = 'reports-index.json';
-  let reports: ReportEntry[] = [];
+  let reports = [];
 
   try {
     const { Body } = await s3Client.send(new GetObjectCommand({
@@ -129,7 +128,7 @@ async function updateReportsIndex(bucketName: string, reportKeyPrefix: string, p
       const content = await Body.transformToString();
       reports = JSON.parse(content);
     }
-  } catch (error: any) {
+  } catch (error) {
     if (error.name === 'NoSuchKey') {
       console.log(`'${indexKey}' not found. Creating new index.`);
     } else {
@@ -137,7 +136,7 @@ async function updateReportsIndex(bucketName: string, reportKeyPrefix: string, p
     }
   }
 
-  const newEntry: ReportEntry = {
+  const newEntry = {
     timestamp: new Date().toISOString(),
     status: passed ? 'Passed' : 'Failed',
     reportPath: `${reportKeyPrefix}/index.html`,
@@ -154,12 +153,12 @@ async function updateReportsIndex(bucketName: string, reportKeyPrefix: string, p
       Body: JSON.stringify(reports, null, 2),
     }));
     console.log(`Updated '${indexKey}' in s3://${bucketName}`);
-  } catch (error: any) {
+  } catch (error) {
     console.error(`Error writing '${indexKey}': ${error.message}`);
   }
 }
 
-async function uploadDirectoryToS3(directoryPath: string, bucketName: string, prefix: string = ''): Promise<void> {
+async function uploadDirectoryToS3(directoryPath, bucketName, prefix = '') {
   const files = fs.readdirSync(directoryPath);
 
   for (const file of files) {
@@ -184,7 +183,7 @@ async function uploadDirectoryToS3(directoryPath: string, bucketName: string, pr
   }
 }
 
-function getContentType(filePath: string): string {
+function getContentType(filePath) {
   const ext = path.extname(filePath).toLowerCase();
   switch (ext) {
     case '.html': return 'text/html';
@@ -204,7 +203,7 @@ function getContentType(filePath: string): string {
   }
 }
 
-async function sendSnsNotification(message: string): Promise<void> {
+async function sendSnsNotification(message) {
   if (!SNS_TOPIC_ARN) {
     console.log('SNS_TOPIC_ARN not set. Skipping notification.');
     return;
@@ -219,7 +218,7 @@ async function sendSnsNotification(message: string): Promise<void> {
     });
     await snsClient.send(command);
     console.log('SNS notification sent.');
-  } catch (error: any) {
+  } catch (error) {
     console.error(`Failed to send SNS notification: ${error.message}`);
   }
 }

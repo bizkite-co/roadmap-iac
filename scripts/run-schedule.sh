@@ -2,16 +2,19 @@
 
 # Script to update the debug schedule to run in the next minute
 
-RULE_NAME="roadmap-e2e-debug-schedule"
+RULE_NAME="roadmap-prod-e2e-test-debug-schedule"
 
-echo "Updating debug schedule '$RULE_NAME' to run in 90 seconds"
+export AWS_REGION="us-west-1" # Explicitly set the AWS region
 
 # Get current schedule
-CURRENT_SCHEDULE_EXPRESSION=$(aws events describe-rule --name "$RULE_NAME" --query "ScheduleExpression" --output text 2>/dev/null)
-if [ -z "$CURRENT_SCHEDULE_EXPRESSION" ]; then
+aws events describe-rule --name "$RULE_NAME" > /dev/null 2>&1
+EXIT_CODE=$?
+echo "aws events describe-rule exit code: $EXIT_CODE"
+if [ $EXIT_CODE -ne 0 ]; then
     echo "Debug schedule not found. Please deploy the latest changes."
     exit 1
 fi
+CURRENT_SCHEDULE_EXPRESSION=$(aws events describe-rule --name "$RULE_NAME" --query "ScheduleExpression" --output text)
 
 # Extract minute and hour from current cron expression
 CURRENT_MINUTE=$(echo "$CURRENT_SCHEDULE_EXPRESSION" | sed -E 's/cron\((\S+)\s+(\S+)\s+.*$/\1/')

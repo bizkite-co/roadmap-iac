@@ -12,6 +12,9 @@ help: ## Display this help screen
 install: ## Run NPM install
 	@npm install
 
+install-lambda: ## Install lambda pacakages
+	@npm install --prefix lambda
+
 .PHONY: synth
 synth: ## cdk synth
 	@cdk synth
@@ -42,7 +45,6 @@ list-schedules: ## List the E2E test schedules
 
 .PHONY: list-runs
 list-runs: ## List the last 10 runs of the E2E test lambda
-	@FUNCTION_NAME=$$(aws cloudformation describe-stack-resources --stack-name RoadmapE2ETestStack --logical-resource-id E2ETestRunnerLambda --query 'StackResources[0].PhysicalResourceId' --output text); \
-	LOG_GROUP_NAME="/aws/lambda/$${FUNCTION_NAME}"; \
-	echo "Fetching recent runs for $${FUNCTION_NAME}..."; \
-	aws logs filter-log-events --log-group-name $${LOG_GROUP_NAME} --filter-pattern "START RequestId" --limit 10 --query 'events[].{Timestamp:strftime(`%Y-%m-%d %H:%M:%S`, from_millis(timestamp)), Message:message}' --output table
+	@LOG_GROUP_NAME="/roadmap/prod/roadmap-e2e-test-runner-log-group"; \
+	echo "Fetching recent runs from log group $${LOG_GROUP_NAME}..."; \
+	aws logs filter-log-events --log-group-name $${LOG_GROUP_NAME} --filter-pattern "START RequestId" --limit 10 --query 'events[].{Timestamp:timestamp, Message:message}' --output table

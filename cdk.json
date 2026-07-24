@@ -1,7 +1,7 @@
 {
   "app": "npx ts-node bin/e2e-test-app.ts",
   "context": {
-    "snsTopicArn": "arn:aws:sns:us-west-1:318364255844:site-down",
+
     "gitRepoUrl": "https://github.com/bizkite-co/roadmap-website",
     "secretName": "roadmap-e2e-credentials",
     "scheduleExpression": "cron(0 12 * * ? *)",
