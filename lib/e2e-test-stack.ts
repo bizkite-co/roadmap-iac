@@ -1,6 +1,6 @@
 import { Stack, StackProps, Duration, RemovalPolicy, CfnOutput } from 'aws-cdk-lib';
 import { Construct } from 'constructs';
-import * as lambda from 'aws-cdk-lib/aws-lambda';
+import * as codebuild from 'aws-cdk-lib/aws-codebuild';
 import * as events from 'aws-cdk-lib/aws-events';
 import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as iam from 'aws-cdk-lib/aws-iam';
@@ -14,10 +14,11 @@ import { Schema } from 'effect';
 import { StackConfigSchema } from './config-schema';
 
 interface E2ETestStackProps extends StackProps {
-  gitRepoUrl: string; 
-  secretName: string;
-  scheduleExpression: string;
-  reportsBucketPrefix: string;
+  gitOwner: string;            // GitHub owner (bizkite-co)
+  gitRepo: string;             // GitHub repo (roadmap-website)
+  gitBranch: string;           // branch to clone
+  secretName: string;          // Secrets Manager secret holding the E2E user password
+  ghTokenSecretName: string;   // Secrets Manager secret holding a GitHub PAT (repo read) for cloning
 }
 
 export class E2ETestStack extends Stack {
@@ -26,10 +27,15 @@ export class E2ETestStack extends Stack {
 
     const rawConfig = JSON.parse(fs.readFileSync('stack.config.json', {encoding: 'utf-8'}));
     const stackConfig = Schema.decodeSync(StackConfigSchema)(rawConfig);
-
     const names = new ResourceNames(this.node.tryGetContext('environment') || 'prod');
 
-    // S3 Bucket for Playwright HTML Reports and all test artifacts
+    // Which deployed env to test against. Tests read the resolved base URL from env.
+    const targetEnv = (this.node.tryGetContext('e2eTargetEnv') || 'uat') as 'uat' | 'prod';
+    const baseUrl = targetEnv === 'prod' ? stackConfig.prod.baseUrl : stackConfig.uat.baseUrl;
+
+    // S3 Bucket for Playwright HTML reports and test artifacts.
+    // Name matches the currently-deployed bucket so CDK updates it in place
+    // (preserves history; the notification-hub bridge subscription depends on the topic below).
     const reportsBucket = new s3.Bucket(this, 'E2ETestReportsBucket', {
       bucketName: `${names.e2eTestStack.s3Bucket}-${this.account}-${this.region}`.toLowerCase(),
       blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,
@@ -39,81 +45,137 @@ export class E2ETestStack extends Stack {
       websiteErrorDocument: 'index.html',
     });
 
-    // Create a new SNS Topic for notifications
+    // SNS topic for failure notifications. Name matches the deployed topic so the
+    // notification-hub bridge (roadmap-website/cdk/lib/notification-hub-bridge-stack.ts)
+    // keeps working unchanged.
     const topic = new sns.Topic(this, 'E2ETestTopic', {
       displayName: 'E2E Test Failure Notifications',
       topicName: names.e2eTestStack.snsTopic,
     });
 
-    // Define the Lambda function for running E2E tests
-    const e2eTestLambda = new lambda.Function(this, 'E2ETestRunnerLambda', {
-      functionName: names.e2eTestStack.lambdaFunction, // Explicitly named Lambda function
-      runtime: lambda.Runtime.NODEJS_22_X,
-      handler: 'index.handler',
-      // This simply zips the lambda directory. Assumes node_modules and e2e tests are present.
-      code: lambda.Code.fromAsset('lambda', { exclude: ['.gitkeep'] }), 
-      logGroup: new logs.LogGroup(this, 'E2ETestRunnerLogGroup', {
-        logGroupName: names.e2eTestStack.logGroup, // Adhere to AWS Lambda log group naming convention
-        retention: logs.RetentionDays.ONE_MONTH,
-        removalPolicy: RemovalPolicy.DESTROY,
-      }),
-      timeout: Duration.minutes(10),
-      memorySize: 1024,
-      environment: {
-        SECRET_NAME: props.secretName,
-        SNS_TOPIC_ARN: topic.topicArn, // Use the new topic
-        REPORTS_BUCKET_NAME: reportsBucket.bucketName,
-      },
+    // Secrets used by the build
+    const e2eSecret = secretsmanager.Secret.fromSecretNameV2(this, 'E2ETestSecret', props.secretName);
+    const ghSecret = secretsmanager.Secret.fromSecretNameV2(this, 'E2EGhSecret', props.ghTokenSecretName);
+
+    // Dedicated log group for the CodeBuild project (clean retention).
+    const logGroup = new logs.LogGroup(this, 'E2ETestRunnerLogGroup', {
+      logGroupName: names.e2eTestStack.lambdaFunction.replace(/-lambda$/, '') + '-log-group',
+      retention: logs.RetentionDays.ONE_MONTH,
+      removalPolicy: RemovalPolicy.DESTROY,
     });
 
-    // Grant permissions to the Lambda function
-    // 1. Allow reading from Secrets Manager for E2E credentials
-    e2eTestLambda.addToRolePolicy(new iam.PolicyStatement({
-      actions: ['secretsmanager:GetSecretValue'],
-      resources: [secretsmanager.Secret.fromSecretNameV2(this, 'E2ETestSecret', props.secretName).secretArn],
-    }));
+    // CodeBuild project that clones roadmap-website, installs Playwright + chromium,
+    // runs the E2E tests against the deployed UAT/PROD URL, uploads the HTML report,
+    // and publishes to SNS on failure.
+    const projectName = names.e2eTestStack.lambdaFunction.replace(/-lambda$/, '');
+    const project = new codebuild.Project(this, 'E2ETestRunnerProject', {
+      projectName,
+      source: codebuild.Source.gitHub({
+        owner: props.gitOwner,
+        repo: props.gitRepo,
+        branchOrRef: props.gitBranch,
+        webhook: false,
+      }),
+      environment: {
+        buildImage: codebuild.LinuxBuildImage.STANDARD_7_0,
+        computeType: codebuild.ComputeType.SMALL,
+        privileged: false,
+      },
+      timeout: Duration.minutes(15),
+      logging: {
+        cloudWatch: { logGroup, enabled: true },
+      },
+      environmentVariables: {
+        BASE_URL: { value: baseUrl },
+        TARGET_ENV: { value: targetEnv },
+        REPORTS_BUCKET_NAME: { value: reportsBucket.bucketName },
+        SNS_TOPIC_ARN: { value: topic.topicArn },
+      },
+      buildSpec: codebuild.BuildSpec.fromObject({
+        version: 0.2,
+        env: {
+          'secrets-manager': {
+            E2E_USER_PASSWORD: `${props.secretName}:SecretString`,
+          },
+        },
+        phases: {
+          install: {
+            'runtime-versions': { nodejs: 20 },
+            commands: [
+              'npm ci',
+              'npx playwright install --with-deps chromium',
+            ],
+          },
+          build: {
+            commands: [
+              'export E2E_USER_EMAIL=mark@bizkite.net',
+              'export E2E_USER_USERNAME=appdev',
+              'export E2E_ENV=$TARGET_ENV',
+              'export E2E_BASE_URL=$BASE_URL',
+              'export E2E_S3_BUCKETNAME=$REPORTS_BUCKET_NAME',
+              'export E2E_S3_REGION=$AWS_REGION',
+              'echo "Running Playwright E2E against $E2E_BASE_URL (env=$E2E_ENV)"',
+              'EXITCODE=0',
+              'npx playwright test --reporter=html || EXITCODE=$?',
+              'REPORT_KEY="reports/$(date -u +%Y-%m-%d)/$(date -u +%H-%M-%S)"',
+              'aws s3 sync playwright-report/ "s3://$REPORTS_BUCKET_NAME/$REPORT_KEY/" || echo "WARN: report upload failed"',
+              'if [ "$EXITCODE" != "0" ]; then aws sns publish --topic-arn "$SNS_TOPIC_ARN" --subject "E2E Test Run Failed" --message "E2E test execution failed against $BASE_URL (env=$TARGET_ENV). See CodeBuild run: https://$AWS_REGION.console.aws.amazon.com/codesuite/codebuild/$AWS_ACCOUNT_ID/projects/' + projectName + '/build/$CODEBUILD_BUILD_ID"; fi',
+              'exit $EXITCODE',
+            ],
+          },
+        },
+      }),
+    });
 
-    // 2. Allow publishing to the new SNS topic
-    topic.grantPublish(e2eTestLambda);
+    // Permissions
+    e2eSecret.grantRead(project);
+    ghSecret.grantRead(project);
+    reportsBucket.grantReadWrite(project);
+    topic.grantPublish(project);
 
-    // 3. Allow read/write to the reports bucket
-    reportsBucket.grantReadWrite(e2eTestLambda);
+    // Wire GitHub auth for the CodeBuild source via a PAT in Secrets Manager.
+    // (In this CDK version, `Source.gitHub` no longer takes an inline auth token;
+    // a CfnSourceCredential is the supported way. Account+region scoped: if a
+    // GitHub source credential already exists in this account/region, replace
+    // this with the existing one manually instead of deploying a duplicate.)
+    new codebuild.CfnSourceCredential(this, 'GitHubSourceCredential', {
+      authType: 'PERSONAL_ACCESS_TOKEN',
+      serverType: 'GITHUB',
+      token: ghSecret.secretValue.unsafeUnwrap(),
+    });
 
-    // Define an EventBridge rule to trigger the Lambda on a schedule
+    // EventBridge rule — DISABLED initially so the daily run only starts once
+    // we have confirmed a green manual build. Flip `enabled: true` after verification.
     new events.Rule(this, 'E2ETestSchedule', {
       ruleName: names.e2eTestStack.scheduleRule,
       schedule: events.Schedule.expression('cron(0 1 * * ? *)'),
-      targets: [new targets.LambdaFunction(e2eTestLambda)],
+      enabled: false,
+      targets: [new targets.CodeBuildProject(project)],
     });
 
-    // Define a new rule for debugging, disabled by default
     new events.Rule(this, 'E2EDebugSchedule', {
       ruleName: names.e2eTestStack.debugScheduleRule,
-      schedule: events.Schedule.expression('cron(0 0 1 1 ? 1970)'), // A date in the past
-      targets: [new targets.LambdaFunction(e2eTestLambda)],
+      schedule: events.Schedule.expression('cron(0 0 1 1 ? 1970)'),
       enabled: false,
+      targets: [new targets.CodeBuildProject(project)],
     });
 
     // --- Stack Outputs ---
-
-    new CfnOutput(this, 'E2EReportsBucketWebsiteUrl', {
-      value: reportsBucket.bucketWebsiteUrl,
-      description: 'URL for the E2E test reports static website',
+    new CfnOutput(this, 'E2ETestRunnerProjectName', {
+      value: project.projectName,
+      description: 'Name of the CodeBuild project that runs E2E tests on a schedule.',
     });
-
+    new CfnOutput(this, 'E2EBaseUrl', {
+      value: baseUrl,
+      description: 'URL the E2E tests run against (set via e2eTargetEnv context: uat|prod).',
+    });
     new CfnOutput(this, 'E2EReportsBucketConsoleUrl', {
       value: `https://s3.console.aws.amazon.com/s3/buckets/${reportsBucket.bucketName}?region=${this.region}`,
-      description: 'Direct link to the S3 bucket in the AWS Console',
+      description: 'Direct link to the S3 reports bucket in the AWS Console.',
     });
-
-    new CfnOutput(this, 'E2ELambdaLogGroupConsoleUrl', {
-      value: `https://console.aws.amazon.com/cloudwatch/home?region=${this.region}#logsV2:log-groups/log-group/${names.e2eTestStack.logGroup.replace(/\//g, '$252F')}`,
-      description: 'Direct link to the Lambda function\'s log group in the AWS Console',
-    });
-
     new CfnOutput(this, 'SNSTopicArn', {
       value: topic.topicArn,
-      description: 'ARN of the new SNS topic for notifications',
+      description: 'ARN of the SNS topic for failure notifications (consumed by notification-hub bridge).',
     });
   }
 }

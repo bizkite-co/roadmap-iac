@@ -1,9 +1,11 @@
 {
   "app": "npx ts-node bin/e2e-test-app.ts",
   "context": {
-
-    "gitRepoUrl": "https://github.com/bizkite-co/roadmap-website",
+    "gitOwner": "bizkite-co",
+    "gitRepo": "roadmap-website",
+    "gitBranch": "dev",
     "secretName": "roadmap-e2e-credentials",
+    "ghTokenSecretName": "github-access-token",
     "scheduleExpression": "cron(0 12 * * ? *)",
     "reportsBucketPrefix": "roadmap-website-e2e",
     "dummy": "true"
