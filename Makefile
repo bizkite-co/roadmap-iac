@@ -23,6 +23,10 @@ synth: ## cdk synth
 deploy: synth ## Deploy the E2E test stack to AWS
 	cdk deploy RoadmapE2ETestStack
 
+.PHONY: deploy-uat-cloudfront
+deploy-uat-cloudfront: ## Deploy the UAT CloudFront ACM front door stack
+	npx cdk deploy -a 'npx ts-node bin/uat-cloudfront.ts' RoadmapUatCloudFrontStack
+
 .PHONY: update-e2e-secret
 update-e2e-secret: ## Create or update the E2E test secret in AWS Secrets Manager using 1Password
 	./scripts/update-e2e-secret.sh
