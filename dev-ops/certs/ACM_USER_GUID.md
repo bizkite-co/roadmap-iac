@@ -15,7 +15,7 @@ The following components have been implemented as part of the automated certific
 7.  **Lambda Function for Certificate Deployment:** A Lambda function (`DeployCertificateLambda`) is deployed to trigger the Ansible playbook (`dev-ops/ansible/install-new-certs.yml`) via AWS Systems Manager Run Command. This Lambda is responsible for fetching the certificate content from ACM and deploying it to the EC2 instances.
 8.  **EventBridge Rule for Deployment Trigger:** A custom EventBridge rule (`AcmValidationSuccessRule`) is configured to listen for a custom event (`ACM Certificate Validation Success`) emitted by the `VerifyDnsPropagationLambda` function. When this event is received (indicating successful ACM validation), this rule triggers the `DeployCertificateLambda` to deploy the new certificate.
 9.  **Ansible Playbook Update:** The `dev-ops/ansible/install-new-certs.yml` playbook has been modified to use the AWS CLI to fetch the certificate body and chain from ACM based on the certificate ARNs passed as extra variables. It then updates the Apache SSL configuration on the target EC2 instances.
-10. **Lambda Function for Certificate Health Checks:** A Lambda function (`CheckCertificateHealthLambda`) is deployed to perform periodic checks on the live certificates served by the web server on the EC2 instances. It checks the certificate expiry date and sends alerts to the SNS topic if the certificate is expiring soon or if the check fails.
+10. **Lambda Function for Certificate Health Checks:** A Lambda function (`CheckCertificateHealthLambda`) is deployed to perform periodic checks on the live certificates served to the public domains. It verifies certificate expiry, hostname coverage (CN/SAN), expected issuer characteristics, HTTPS endpoint reachability, and whether the domains are actually being served through the expected CloudFront front door.
 11. **EventBridge Rule for Health Checks:** An EventBridge rule (`CertificateHealthCheckRule`) is scheduled to trigger the `CheckCertificateHealthLambda` function daily.
 
 ## Remaining Manual Steps and Timeline
@@ -28,7 +28,7 @@ While significant automation has been implemented, the following manual steps ar
     *   **When to do:** After deploying the CDK stack that includes the ACM certificates and Route 53 Hosted Zones. Monitor the certificate status in ACM until it shows "Issued".
 3.  **Verify Initial Deployment:** After the initial ACM certificate is issued and the `AcmValidationSuccessRule` triggers the `DeployCertificateLambda`, verify that the new certificates have been successfully deployed to the EC2 instances and are being served correctly. Use the certificate health check Lambda or manual checks (e.g., `openssl s_client`) to confirm.
     *   **When to do:** After the initial ACM certificate is issued and the automated deployment is triggered.
-4.  **Monitor SNS Alerts:** Ensure that the SNS topic for certificate alerts is configured with appropriate subscriptions (e.g., email addresses) so that administrators receive notifications about impending expirations or health check failures.
+4.  **Monitor Alert Delivery:** Ensure that the certificate alert SNS topic is connected to the account's working notification path. In this environment, the preferred path is the notification-hub bridge, which forwards certificate alerts to the central notification service (including `ntfy.sh` delivery and other configured handlers).
     *   **When to do:** As soon as the CDK stack is deployed.
 5.  **Monitor Automated Renewal:** ACM automatically attempts to renew certificates before they expire. Monitor the certificate status in ACM as the expiration date approaches to ensure the automated renewal is successful. The `VerifyDnsPropagationRule` and `AcmValidationSuccessRule` should handle the validation and deployment of the renewed certificate.
     *   **When to do:** Periodically as the certificate expiration date approaches (e.g., starting 60 days before expiration).
@@ -39,10 +39,35 @@ While significant automation has been implemented, the following manual steps ar
 
 Assuming DNS is migrated to Route 53 and the initial ACM certificates are issued:
 
-1.  **Monitor SNS Alerts:** Pay attention to alerts from the `CertificateAlertTopic` indicating that certificates are approaching expiration (around 45 days before).
+1.  **Monitor Certificate Alerts:** Pay attention to alerts from the `CertificateAlertTopic` / notification hub indicating that certificates are approaching expiration, that the wrong certificate is being served, or that a domain is no longer being served through the expected CloudFront/ACM path.
 2.  **Monitor ACM Status:** Check the status of the ACM certificates in the AWS Management Console. ACM should automatically attempt renewal.
 3.  **Automated Validation and Deployment:** The `VerifyDnsPropagationRule` and `AcmValidationSuccessRule` should automatically handle the DNS validation in Route 53 and trigger the `DeployCertificateLambda` to update the certificates on the EC2 instances once renewed by ACM.
-4.  **Monitor Health Checks:** The daily `CertificateHealthCheckRule` will continue to verify that the correct and valid certificates are being served.
+4.  **Monitor Health Checks:** The daily `CertificateHealthCheckRule` will continue to verify that the correct and valid certificates are being served publicly, including CloudFront presence, Amazon-issued certificate expectations, hostname coverage, and endpoint reachability.
+
+## Current Health Check Expectations
+
+The certificate health monitor is intended to validate the public serving posture for these domains:
+
+- `roadmappartners.net`
+  - expected to be served through CloudFront
+  - expected to present an Amazon-issued ACM certificate
+  - expected application path: `/roadmap/login.html`
+- `uat.roadmappartners.net`
+  - expected to be served through CloudFront
+  - expected to present an Amazon-issued ACM certificate
+  - expected application path: `/roadmap/login.html`
+- `retirementtaxanalyzer.com`
+  - expected to be served through CloudFront
+  - expected to present an Amazon-issued ACM certificate
+  - expected application path: `/`
+
+An alert should be treated as actionable if any of the following occurs:
+
+- certificate expires within the warning threshold
+- certificate SAN/CN no longer covers the hostname
+- issuer is no longer the expected Amazon-issued certificate path
+- HTTPS endpoint returns a server error
+- response no longer appears to be served through CloudFront
 5.  **Manual Fallback:** If any issues arise, use the updated `dev-ops/ansible/install-new-certs.yml` playbook (providing the new certificate ARNs) or the `dev-ops/ansible/rollback-certs.yml` playbook as needed.
 
 This automated process significantly reduces the manual effort required for annual certificate rollovers, primarily requiring monitoring and intervention only if issues occur.
