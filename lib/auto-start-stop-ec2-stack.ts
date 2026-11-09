@@ -8,9 +8,10 @@ import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 import * as route53 from 'aws-cdk-lib/aws-route53';
 import * as sns from 'aws-cdk-lib/aws-sns';
 import * as ssm from 'aws-cdk-lib/aws-ssm';
-import * as route53domains from 'aws-cdk-lib/aws-route53domains';
 
 import fs = require('fs');
+import { Schema } from 'effect';
+import { StackConfigSchema } from './config-schema';
 import { CertificateAutomationConstruct } from './certificate-automation-construct'; // Import the new construct
 
 // Removed: Interface for stack props with certificate ARNs
@@ -24,7 +25,10 @@ export class AutoStartStopEc2Stack extends cdk.Stack {
   constructor (scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props);
 
-    const stackConfig = JSON.parse(fs.readFileSync('stack.config.json', {encoding: 'utf-8'}));
+    const rawConfig = JSON.parse(fs.readFileSync('stack.config.json', {encoding: 'utf-8'}));
+    
+    // Validate the config strictly using Effect Schema
+    const stackConfig = Schema.decodeSync(StackConfigSchema)(rawConfig);
     const uatConfig = stackConfig.uat;
     const prodConfig = stackConfig.prod;
 
@@ -56,9 +60,9 @@ export class AutoStartStopEc2Stack extends cdk.Stack {
     }));
 
     // STOP EC2 instances rule for UAT
+    let stopRuleUat: events.Rule | undefined = undefined;
     if (uatConfig.autoStopSchedule) {
-      const stopRuleUat = new events.Rule(this, 'StopRuleUat', {
-        ruleName: `${id}-StopRuleUat`,
+      stopRuleUat = new events.Rule(this, 'StopRuleUat', {
         schedule: events.Schedule.expression(uatConfig.autoStopSchedule)
       });
 
@@ -71,15 +75,12 @@ export class AutoStartStopEc2Stack extends cdk.Stack {
     let stopStartRuleProd: events.Rule | undefined = undefined;
     if (prodConfig.autoStopStartSchedule) {
       stopStartRuleProd = new events.Rule(this, 'StopStartRuleProd', {
-        ruleName: `${id}-StopStartRuleProd`,
         schedule: events.Schedule.expression(prodConfig.autoStopStartSchedule)
       });
 
       stopStartRuleProd.addTarget(new targets.LambdaFunction(lambdaFn, {
         event: targets.RuleTargetInput.fromObject({Region: prodConfig.region, Action: 'stopstart'})
       }));
-
-      console.log('StopStartRuleProd name: ' + stopStartRuleProd.ruleName);
     }
 
     // E2E Test Lambda Function
@@ -119,7 +120,12 @@ export class AutoStartStopEc2Stack extends cdk.Stack {
       certificateAlertTopic: certificateAlertTopic,
     });
 
-    // Lambda function to trigger certificate deployment via Systems Manager Run Command
+    // Lambda function to trigger certificate deployment via SSM Run Command.
+    // On ACM renewal, this Lambda fetches the new cert from ACM and installs it
+    // on the EC2 instance by running the install-new-certs.yml Ansible playbook
+    // via SSM AWS-RunShellScript. The playbook lives in roadmap-iac on the developer
+    // machine, not on the EC2 itself — so we pass the cert ARNs as shell env vars
+    // and run the install steps directly via SSM rather than calling ansible-playbook.
     const deployCertificateLambda = new lambda.Function(this, 'DeployCertificateLambda', {
       code: lambda.Code.fromInline(`
 import boto3
@@ -131,82 +137,65 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 
 ssm_client = boto3.client('ssm')
+acm_client = boto3.client('acm', region_name='us-east-1')
 
 def main(event, context):
     """
-    Lambda handler to trigger Ansible playbook execution via Systems Manager Run Command.
-    Expected event input from EventBridge:
-    {
-        "certificate_arns": ["arn:aws:acm:us-west-1:123456789012:certificate/...", ...]
-    }
+    Triggered by EventBridge on ACM Certificate Validation Success.
+    Fetches the renewed cert body from ACM and installs it on the PROD EC2
+    instance via SSM Run Command (AWS-RunShellScript).
     """
     logger.info("Received event: " + json.dumps(event))
 
-    # This Lambda now expects certificate ARNs directly in the event detail,
-    # or you might need to fetch them differently if not triggered by the verification Lambda.
-    # For now, keeping the existing logic assuming the event structure is provided externally.
-    certificate_arns = event.get('detail', {}).get('certificate_arns', [])
-    if not certificate_arns:
-        logger.error("No certificate ARNs found in the event detail.")
-        return {
-            'statusCode': 400,
-            'body': 'No certificate ARNs provided in event detail.'
-        }
-
-    # Assuming you have a way to map certificate ARNs to target EC2 instances
-    # For simplicity, let's assume a fixed instance ID for now.
-    # In a real scenario, you might look up instances based on tags or other criteria.
     target_instance_id = os.environ.get('TARGET_INSTANCE_ID')
+    rta_cert_arn = os.environ.get('RTA_CERT_ARN')
+
     if not target_instance_id:
         logger.error("TARGET_INSTANCE_ID environment variable not set.")
-        return {
-            'statusCode': 500,
-            'body': 'Target instance ID not configured.'
-        }
+        return {'statusCode': 500, 'body': 'TARGET_INSTANCE_ID not configured.'}
 
-    # Define the Systems Manager document and parameters
-        # Assumes you have an Ansible playbook available on the EC2 instance
-        # and a Systems Manager document configured to run Ansible playbooks.
-        # You might need to create a custom SSM document or use AWS-RunShellScript
-        # to execute the ansible-playbook command.
-        ssm_document_name = 'AWS-RunShellScript' # Example SSM document
-        ansible_playbook_path = '/home/ubuntu/your-repo/dev-ops/ansible/install-new-certs.yml' # Update with actual path
-        ansible_inventory_path = '/home/ubuntu/your-repo/dev-ops/ansible/inventory' # Update with actual path
-        # Pass certificate ARNs as extra vars to the Ansible playbook
-        extra_vars = {
-            'retirement_tax_analyzer_cert_arn': certificate_arns[0] if len(certificate_arns) > 0 else '',
-            'roadmap_partners_cert_arn': certificate_arns[1] if len(certificate_arns) > 1 else ''
-        }
-        ansible_command = f'ansible-playbook {ansible_playbook_path} -i {ansible_inventory_path} --extra-vars \'{json.dumps(extra_vars)}\''
+    if not rta_cert_arn:
+        logger.error("RTA_CERT_ARN environment variable not set.")
+        return {'statusCode': 500, 'body': 'RTA_CERT_ARN not configured.'}
 
+    try:
+        # Export the renewed cert from ACM
+        cert_response = acm_client.get_certificate(CertificateArn=rta_cert_arn)
+        cert_body = cert_response['Certificate']
+        cert_chain = cert_response.get('CertificateChain', '')
 
-        try:
-            response = ssm_client.send_command(
-                InstanceIds=[target_instance_id],
-                DocumentName=ssm_document_name,
-                Parameters={'commands': [ansible_command]},
-                Comment='Automated certificate deployment via ACM renewal'
-            )
-            command_id = response['Command']['CommandId']
-            logger.info(f"SSM Run Command sent successfully with Command ID: {command_id}")
-            return {
-                'statusCode': 200,
-                'body': f'SSM Run Command triggered: {command_id}'
-            }
-        except Exception as e:
-            logger.error(f"Error sending SSM Run Command: {e}")
-            return {
-                'statusCode': 500,
-                'body': f'Error triggering SSM Run Command: {e}'
-            }
+        # Write cert to disk and reload Apache via SSM
+        commands = [
+            f'echo "{cert_body}" | sudo tee /etc/ssl/certs/retirementtaxanalyzer.crt',
+            f'echo "{cert_chain}" | sudo tee /etc/ssl/certs/godaddy-chain.crt',
+            'sudo apachectl configtest',
+            'sudo systemctl reload apache2',
+            'echo "Certificate install complete"'
+        ]
+
+        response = ssm_client.send_command(
+            InstanceIds=[target_instance_id],
+            DocumentName='AWS-RunShellScript',
+            Parameters={'commands': commands},
+            Comment='Automated ACM certificate deployment'
+        )
+        command_id = response['Command']['CommandId']
+        logger.info(f"SSM Run Command sent: {command_id}")
+        return {'statusCode': 200, 'body': f'SSM command triggered: {command_id}'}
+
+    except Exception as e:
+        logger.error(f"Error deploying certificate: {e}")
+        return {'statusCode': 500, 'body': f'Error: {e}'}
       `),
       handler: 'index.main',
-      timeout: cdk.Duration.seconds(600), // Adjust timeout as needed for Ansible execution
+      timeout: cdk.Duration.seconds(60),
       runtime: lambda.Runtime.PYTHON_3_9,
       environment: {
-        TARGET_INSTANCE_ID: prodConfig.instanceId // Pass the production instance ID
+        TARGET_INSTANCE_ID: prodConfig.instanceId,  // i-0463809a6acf143c7 (PRS-PROD, us-west-1)
+        RTA_CERT_ARN: 'arn:aws:acm:us-east-1:865664998993:certificate/e41aabd9-731c-48f0-923b-8cb54906703f'
       }
     });
+
 
     // Grant the deployment Lambda permissions to use Systems Manager Run Command
     deployCertificateLambda.addToRolePolicy(new iam.PolicyStatement({
@@ -243,9 +232,27 @@ def main(event, context):
       environment: {
         SNS_TOPIC_ARN: certificateAlertTopic.topicArn, // Pass the alert topic ARN
         DOMAINS_TO_CHECK: JSON.stringify([
-          { "hostname": "retirementtaxanalyzer.com", "port": 443 },
-          { "hostname": "roadmappartners.net", "port": 443 },
-          { "hostname": "uat.roadmappartners.net", "port": 443 } // Include UAT if needed
+          {
+            "hostname": "retirementtaxanalyzer.com",
+            "port": 443,
+            "expected_path": "/",
+            "expected_issuer_contains": "Amazon",
+            "require_cloudfront": true
+          },
+          {
+            "hostname": "roadmappartners.net",
+            "port": 443,
+            "expected_path": "/roadmap/login.html",
+            "expected_issuer_contains": "Amazon",
+            "require_cloudfront": true
+          },
+          {
+            "hostname": "uat.roadmappartners.net",
+            "port": 443,
+            "expected_path": "/roadmap/login.html",
+            "expected_issuer_contains": "Amazon",
+            "require_cloudfront": true
+          }
         ])
       }
     });
@@ -264,92 +271,22 @@ def main(event, context):
       targets: [new targets.LambdaFunction(checkCertificateHealthLambda)]
     });
 
-    const roadmapPartnersHostedZone = new route53.HostedZone(this, 'RoadmapPartnersHostedZone', {
+    // Import existing Route 53 hosted zones — both already exist and are managed externally.
+    // Creating new HostedZone constructs would produce duplicate zones and break DNS.
+    const roadmapPartnersHostedZone = route53.HostedZone.fromHostedZoneAttributes(this, 'RoadmapPartnersHostedZone', {
+      hostedZoneId: 'Z04879222BU448TUVC86H',
       zoneName: 'roadmappartners.net'
     });
 
-    const retirementTaxAnalyzerHostedZone = new route53.HostedZone(this, 'RetirementTaxAnalyzerHostedZone', {
+    const retirementTaxAnalyzerHostedZone = route53.HostedZone.fromHostedZoneAttributes(this, 'RetirementTaxAnalyzerHostedZone', {
+      hostedZoneId: 'Z0793299AG2CLVJ6NTM5',
       zoneName: 'retirementtaxanalyzer.com'
     });
 
-    // Route 53 Domain Transfer Configuration
-    const retirementTaxAnalyzerDomain = new route53domains.CfnDomain(this, 'RetirementTaxAnalyzerDomain', {
-      domainName: 'retirementtaxanalyzer.com',
-      adminContact: {
-        addressLine1: '123 Main St',
-        city: 'Anytown',
-        countryCode: 'US',
-        email: 'admin@example.com',
-        firstName: 'John',
-        lastName: 'Doe',
-        phoneNumber: '+15551234567',
-        postalCode: '12345',
-        state: 'WA'
-      },
-      registrantContact: {
-        addressLine1: '123 Main St',
-        city: 'Anytown',
-        countryCode: 'US',
-        email: 'registrant@example.com',
-        firstName: 'Jane',
-        lastName: 'Doe',
-        phoneNumber: '+15551234567',
-        postalCode: '12345',
-        state: 'WA'
-      },
-      techContact: {
-        addressLine1: '123 Main St',
-        city: 'Anytown',
-        countryCode: 'US',
-        email: 'tech@example.com',
-        firstName: 'Jim',
-        lastName: 'Doe',
-        phoneNumber: '+15551234567',
-        postalCode: '12345',
-        state: 'WA'
-      },
-      autoRenew: true,
-      transferLock: true,
-    });
-
-    const roadmappartnersDomain = new route53domains.CfnDomain(this, 'RoadmappartnersDomain', {
-      domainName: 'roadmappartners.net',
-      adminContact: {
-        addressLine1: '123 Main St',
-        city: 'Anytown',
-        countryCode: 'US',
-        email: 'admin@example.com',
-        firstName: 'John',
-        lastName: 'Doe',
-        phoneNumber: '+15551234567',
-        postalCode: '12345',
-        state: 'WA'
-      },
-      registrantContact: {
-        addressLine1: '123 Main St',
-        city: 'Anytown',
-        countryCode: 'US',
-        email: 'registrant@example.com',
-        firstName: 'Jane',
-        lastName: 'Doe',
-        phoneNumber: '+15551234567',
-        postalCode: '12345',
-        state: 'WA'
-      },
-      techContact: {
-        addressLine1: '123 Main St',
-        city: 'Anytown',
-        countryCode: 'US',
-        email: 'tech@example.com',
-        firstName: 'Jim',
-        lastName: 'Doe',
-        phoneNumber: '+15551234567',
-        postalCode: '12345',
-        state: 'WA'
-      },
-      autoRenew: true,
-      transferLock: true,
-    });
+    // NOTE: CfnDomain (route53domains) constructs were removed.
+    // Both domains are already registered with AWS Route 53 Domains.
+    // The previous code had placeholder contact info (123 Main St / admin@example.com)
+    // which would have overwritten real registrar data on deploy.
 
     // Stack Outputs
     new cdk.CfnOutput(this, 'AutoStartStopLambdaArn', {
@@ -399,36 +336,29 @@ def main(event, context):
 
     new cdk.CfnOutput(this, 'RoadmapPartnersHostedZoneId', {
       value: roadmapPartnersHostedZone.hostedZoneId,
-      description: 'The ID of the Route 53 Hosted Zone for roadmappartners.net.'
+      description: 'The ID of the Route 53 Hosted Zone for roadmappartners.net (Z04879222BU448TUVC86H).'
     });
 
     new cdk.CfnOutput(this, 'RetirementTaxAnalyzerHostedZoneId', {
       value: retirementTaxAnalyzerHostedZone.hostedZoneId,
-      description: 'The ID of the Route 53 Hosted Zone for retirementtaxanalyzer.com.'
+      description: 'The ID of the Route 53 Hosted Zone for retirementtaxanalyzer.com (Z0793299AG2CLVJ6NTM5).'
     });
 
-    new cdk.CfnOutput(this, 'RoadmappartnersDomainId', {
-      value: roadmappartnersDomain.logicalId,
-      description: 'The ID of the Route 53 Domain for roadmappartners.net.'
-    });
-
-    new cdk.CfnOutput(this, 'RetirementTaxAnalyzerDomainId', {
-      value: retirementTaxAnalyzerDomain.logicalId,
-      description: 'The ID of the Route 53 Domain for retirementtaxanalyzer.com.'
-    });
+    // NOTE: RoadmappartnersDomainId and RetirementTaxAnalyzerDomainId outputs removed
+    // alongside the CfnDomain constructs (placeholder data, domains already registered).
 
 
     // Add outputs for the rule names
-    if (uatConfig.autoStopSchedule) {
+    if (uatConfig.autoStopSchedule && stopRuleUat) {
       new cdk.CfnOutput(this, 'StopRuleUatName', {
-        value: `${id}-StopRuleUat`,
+        value: stopRuleUat.ruleName,
         description: 'The name of the CloudWatch Event Rule that stops the UAT EC2 instances.'
       });
     }
 
     if (stopStartRuleProd) {
       new cdk.CfnOutput(this, 'StopStartRuleProdName', {
-        value: `${id}-StopStartRuleProd`,
+        value: stopStartRuleProd.ruleName,
         description: 'The name of the CloudWatch Event Rule that stops and starts the PROD EC2 instances.'
       });
     }
