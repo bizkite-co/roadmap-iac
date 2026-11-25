@@ -3,9 +3,8 @@
   "context": {
     "gitOwner": "bizkite-co",
     "gitRepo": "roadmap-website",
-    "gitBranch": "dev",
-    "secretName": "roadmap-e2e-credentials",
-    "ghTokenSecretName": "github-access-token",
+    "gitBranch": "uat",
+    "e2eTargetEnv": "prod",
     "scheduleExpression": "cron(0 12 * * ? *)",
     "reportsBucketPrefix": "roadmap-website-e2e",
     "dummy": "true"

@@ -72,7 +72,7 @@ async function getPlaywrightEnv(secretName: string, reportsBucketName: string): 
 
   return {
     ...process.env, // Inherit existing Lambda environment variables
-    E2E_USER_EMAIL: "mark@bizkite.net", // Hardcoded for now, could be from Secrets Manager
+    E2E_USER_EMAIL: "test@bizkite.net", // Hardcoded for now, could be from Secrets Manager
     E2E_USER_USERNAME: "appdev", // Hardcoded for now, could be from Secrets Manager
     E2E_USER_PASSWORD: password,
     E2E_S3_BUCKETNAME: reportsBucketName,

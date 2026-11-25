@@ -27,7 +27,7 @@ def main(event, context):
         # Create the config.toml file
         config_content = f'''
 [user]
-email = "mark@bizkite.net"
+email = "test@bizkite.net"
 username = "appdev"
 password = "{password}"
 

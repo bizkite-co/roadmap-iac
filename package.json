@@ -37,9 +37,14 @@
     "uat-stop": "./uat_control.sh stop",
     "deploy-uat-manual": "./scripts/deploy_uat_manual.sh",
     "start:prod": " ssh $prod 'sudo /opt/tomcat/apache-tomcat-9.0.53/bin/startup.sh'",
+    "test": "npx ts-node --transpile-only test/buildspec-shell.test.ts",
+    "lint": "eslint lib bin test scripts --ignore-pattern 'scripts/**/*.sh'",
     "test:e2e": "./scripts/run-e2e-tests.sh"
   },
   "devDependencies": {
-    "@types/node": "^20.0.0"
+    "@eslint/js": "^10.0.1",
+    "@types/node": "^20.0.0",
+    "eslint": "^10.14.0",
+    "typescript-eslint": "^8.72.2"
   }
 }

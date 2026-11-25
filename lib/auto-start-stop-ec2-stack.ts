@@ -4,10 +4,8 @@ import * as lambda from 'aws-cdk-lib/aws-lambda';
 import * as targets from 'aws-cdk-lib/aws-events-targets';
 import * as cdk from 'aws-cdk-lib';
 import { Construct } from 'constructs';
-import * as acm from 'aws-cdk-lib/aws-certificatemanager';
 import * as route53 from 'aws-cdk-lib/aws-route53';
 import * as sns from 'aws-cdk-lib/aws-sns';
-import * as ssm from 'aws-cdk-lib/aws-ssm';
 
 import fs = require('fs');
 import { Schema } from 'effect';
@@ -83,37 +81,13 @@ export class AutoStartStopEc2Stack extends cdk.Stack {
       }));
     }
 
-    // E2E Test Lambda Function
-    const e2eTestLambda = new lambda.Function(this, 'e2eTestLambda', {
-      code: lambda.Code.fromInline(fs.readFileSync('lambda/e2e-test.py', {encoding: 'utf-8'})),
-      handler: 'main',
-      timeout: cdk.Duration.seconds(300),
-      runtime: lambda.Runtime.PYTHON_3_9,
-      environment: {
-        SNS_TOPIC_ARN: snsTopicArn
-      }
-    });
-
-    e2eTestLambda.addToRolePolicy(new iam.PolicyStatement({
-      actions: [
-        's3:GetObject',
-        's3:PutObject',
-        'sns:Publish'
-      ],
-      resources: ['*']
-    }));
-
-    // E2E Test Rules
-    const e2eTestRules: events.Rule[] = [];
-    prodConfig.e2eTestSchedule.forEach((schedule: string, index: number) => {
-      const e2eTestRule = new events.Rule(this, `e2eTestRule${index}`, {
-        ruleName: `${id}-e2eTestRule${index}`,
-        schedule: events.Schedule.expression(schedule),
-      });
-
-      e2eTestRule.addTarget(new targets.LambdaFunction(e2eTestLambda));
-      e2eTestRules.push(e2eTestRule);
-    });
+    // E2E tests are not run from this stack. The previous inline function used
+    // handler "main", which Lambda rejects before the function starts, so it
+    // could not publish a failure. RoadmapE2ETestStack runs the suite and
+    // publishes to the notification-hub topic.
+    // The live AutoStartStopEc2Stack is UPDATE_ROLLBACK_FAILED, so this removal
+    // is source-only until that stack can be deployed again. The live rules
+    // are disabled out of band.
 
     // Instantiation of CertificateAutomationConstruct
     const certificateAutomation = new CertificateAutomationConstruct(this, 'CertificateAutomation', {
@@ -294,11 +268,6 @@ def main(event, context):
       description: 'The ARN of the Lambda function that starts and stops the EC2 instances.'
     });
 
-    new cdk.CfnOutput(this, 'E2eTestLambdaArn', {
-      value: e2eTestLambda.functionArn,
-      description: 'The ARN of the Lambda function that runs the E2E tests.'
-    });
-
     new cdk.CfnOutput(this, 'SnsTopicArn', {
       value: snsTopicArn,
       description: 'The ARN of the SNS topic that receives failure notifications.'
@@ -363,9 +332,5 @@ def main(event, context):
       });
     }
 
-    e2eTestRules.forEach((rule: events.Rule, index: number) => {
-      new cdk.CfnOutput(this, `E2eTestRuleName${index}`, {
-        value: rule.ruleName,
-        description: `The name of the CloudWatch Event Rule that triggers the E2e test ${index}.`
-      });
-    }
+  }
+}

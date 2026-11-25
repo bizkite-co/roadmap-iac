@@ -1,10 +1,18 @@
 # E2E Test Infrastructure
 
-This document describes the setup and usage of the End-to-End (E2E) test infrastructure defined in this `roadmap-iac` repository. These tests are designed to run on a scheduled basis against the deployed `roadmap-website` application.
+This document describes the scheduled Playwright run defined in this `roadmap-iac` repository. The tests live in `roadmap-website`. The runner checks those files out and opens the live site. It does not deploy the application.
 
 ## Overview
 
-The E2E tests are written using Playwright (TypeScript) and reside in the `roadmap-website` repository. This `roadmap-iac` repository deploys an AWS Lambda function that orchestrates the execution of these tests on a schedule. Test reports (including HTML reports and screenshots) are uploaded to a dedicated S3 bucket, and an index of all test runs is maintained.
+CodeBuild project `roadmap-prod-e2e-test-runner` in `us-west-1` runs the Chromium Playwright suite. As of 16 November 2026 its source is GitHub `https://github.com/bizkite-co/roadmap-website.git`, branch `uat`. `BASE_URL` is `https://roadmappartners.net`, `TARGET_ENV` is `prod`, and `E2E_DB_INSTANCE_TAG` is `PRS-PROD`. EventBridge starts it on weekdays at 13:00 and 20:00 UTC. A failed build publishes to `roadmap-prod-e2e-test-runner-notifications`.
+
+The checkout is the test program. The browser then uses the production site. A push to GitHub does not deploy the WAR. Deploy remains `scripts/deploy.sh` over SSH.
+
+On 15 November 2026 at 10:09 PM Pacific, build `roadmap-prod-e2e-test-runner:faf75e36-0573-42d0-a42b-560c231a44e7` resolved commit `49cecb3` and succeeded: 13 passed, 1 flaky.
+
+The CDK in this repo now sets `gitOwner` to `bizkite-co`, `gitBranch` to `uat`, and `Source.gitHub` with the webhook off. That stack has not been deployed. Deploying the previously deployed template would point the project back at CodeCommit `dev`. Do not deploy that old template.
+
+CodeBuild reads the private repository with an account-level GitHub personal access token. The token value is not stored in this repo.
 
 ## Prerequisites
 
@@ -18,50 +26,22 @@ Before deploying or updating the E2E test infrastructure, ensure you have the fo
 
 ## Configuration
 
-The E2E test infrastructure is configured via the `cdk.json` file in the root of this repository. You will need to set the following context variables:
+`cdk.json` selects the GitHub checkout:
 
-*   `gitRepoUrl`: The HTTPS URL of your `roadmap-website` GitHub repository (e.g., `https://github.com/bizkite-co/roadmap-website`).
-*   `secretName`: The name of the AWS Secrets Manager secret that will store the Playwright user's password (e.g., `roadmap-e2e-credentials`).
-*   `snsTopicArn`: The ARN of an AWS SNS topic where failure notifications will be sent (e.g., `arn:aws:sns:us-west-1:318364255844:site-down`).
-*   `scheduleExpression`: A cron expression defining when the E2E tests should run (e.g., `cron(0 12 * * ? *)` for daily at 12:00 UTC).
-*   `reportsBucketPrefix`: A unique prefix for the S3 bucket that will store test reports and artifacts (e.g., `roadmap-website-e2e`). The full bucket name will be constructed as `${reportsBucketPrefix}-${AWS_ACCOUNT_ID}-${AWS_REGION}`.
+*   `gitOwner`: `bizkite-co`
+*   `gitRepo`: `roadmap-website`
+*   `gitBranch`: `uat`
+*   `e2eTargetEnv`: `prod`. The stack strips a trailing `/roadmap` from the configured base URL, because the specs request `/roadmap/...` themselves.
 
-Example `cdk.json` context:
+`stack.config.json` holds the weekday cron expressions under `prod.e2eTestSchedule`: `cron(0 13 ? * MON-FRI *)` and `cron(0 20 ? * MON-FRI *)`.
 
-```json
-{
-  "app": "npx ts-node bin/e2e-test-app.ts",
-  "context": {
-    "snsTopicArn": "arn:aws:sns:us-west-1:318364255844:site-down",
-    "gitRepoUrl": "https://github.com/bizkite-co/roadmap-website",
-    "secretName": "roadmap-e2e-credentials",
-    "scheduleExpression": "cron(0 12 * * ? *)",
-    "reportsBucketPrefix": "roadmap-website-e2e",
-    "dummy": "true"
-  }
-}
-```
+Each run creates `test@bizkite.net` on the production database, uses that login for the signed-in specs, and deletes it at the end. The password is generated in the build and is not stored in Secrets Manager. The registration spec also creates a real trial account and does not delete it.
 
 ## Deployment
 
-Follow these steps to deploy the E2E test infrastructure:
+The live project was pointed at GitHub with the CodeBuild API. `RoadmapE2ETestStack` has not been redeployed since that change. A later `cdk deploy` must use this updated source. Deploying the old template puts the job back on CodeCommit `dev`.
 
-1.  **Install Node.js dependencies:**
-    ```bash
-    npm install
-    ```
-
-2.  **Update AWS Secrets Manager with E2E credentials:**
-    This step fetches the E2E user password from 1Password and stores it in AWS Secrets Manager. Ensure your `op` CLI is signed in.
-    ```bash
-    make update-e2e-secret
-    ```
-
-3.  **Deploy the CDK stack:**
-    ```bash
-    make deploy
-    ```
-    This will deploy the Lambda function, S3 reports bucket, and EventBridge schedule to your AWS account.
+Reports go to `roadmap-prod-e2e-test-runner-reports-865664998993-us-west-1`.
 
 ## Accessing Test Reports
 
