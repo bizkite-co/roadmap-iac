@@ -100,3 +100,6 @@ For detailed information on setting up, configuring, and deploying the E2E test 
     ```bash
     $ python -m pytest ./lambda/test/test_start_stop_ec2.py -vv
     ```
+## Outbound email
+
+See [docs/ses-outbound-email.md](docs/ses-outbound-email.md) for the SES API sender settings and IAM policy managed by CDK.
