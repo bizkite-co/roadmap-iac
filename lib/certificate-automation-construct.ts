@@ -21,16 +21,23 @@ export class CertificateAutomationConstruct extends Construct {
   constructor(scope: Construct, id: string, props: CertificateAutomationConstructProps) {
     super(scope, id);
 
-    // Define ACM Certificates (configured for external DNS validation)
+    // NOTE: retirementtaxanalyzer.com cert was manually created on 2026-06-12 during a live
+    // incident fix (expired GoDaddy cert). Import it here so CDK does not attempt to create
+    // a duplicate. DNS validation CNAMEs are already in Route 53 hosted zone Z0793299AG2CLVJ6NTM5.
+    const retirementTaxAnalyzerCert = acm.Certificate.fromCertificateArn(
+      this,
+      'RetirementTaxAnalyzerCertificate',
+      'arn:aws:acm:us-east-1:865664998993:certificate/e41aabd9-731c-48f0-923b-8cb54906703f'
+    );
+
+    // NOTE: *.roadmappartners.net is still a GoDaddy-issued cert installed directly on the
+    // EC2 instance (renewed 2026-06-12, expires 2026-11-25). This ACM cert definition will
+    // request a new ACM-managed cert when the stack is deployed — coordinate the Apache
+    // install-new-certs.yml Ansible playbook to switch over before the GoDaddy cert expires.
     const roadmapPartnersCert = new acm.Certificate(this, 'RoadmapPartnersCertificate', {
       domainName: '*.roadmappartners.net',
       subjectAlternativeNames: ['roadmappartners.net'],
-      validation: acm.CertificateValidation.fromDns(), // Expecting external DNS validation
-    });
-
-    const retirementTaxAnalyzerCert = new acm.Certificate(this, 'RetirementTaxAnalyzerCertificate', {
-      domainName: 'retirementtaxanalyzer.com',
-      validation: acm.CertificateValidation.fromDns(), // Expecting external DNS validation
+      validation: acm.CertificateValidation.fromDns(), // Route 53 hosted zone Z04879222BU448TUVC86H
     });
 
     this.roadmapPartnersCertificateArn = roadmapPartnersCert.certificateArn;

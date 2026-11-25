@@ -6,4 +6,5 @@ import { UatCloudFrontStack } from '../lib/uat-cloudfront-stack';
 const app = new cdk.App();
 new UatCloudFrontStack(app, 'RoadmapUatCloudFrontStack', {
   env: { region: process.env.CDK_DEFAULT_REGION, account: process.env.CDK_DEFAULT_ACCOUNT },
+  synthesizer: new cdk.DefaultStackSynthesizer({ qualifier: 'hbt' }),
 });

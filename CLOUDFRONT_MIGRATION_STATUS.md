@@ -15,6 +15,8 @@ Date: 2026-11-08
 - PROD distribution domain: `d13wmzeg1p1w52.cloudfront.net`
 - PROD hostname: `roadmappartners.net`
 - PROD origin protocol policy: `HTTPS_ONLY`
+- PROD origin domain, as of 2026-11-14: `roadmap-prod-origin-1785733092.us-west-1.elb.amazonaws.com`
+- `retirementtaxanalyzer.com` distribution `EZFILSGT4N1HH` uses that same ALB and is not in this CDK app. Do not add a new stack for it without importing the existing distribution.
 
 - ACM certificate (us-east-1):
   - `arn:aws:acm:us-east-1:865664998993:certificate/a3c6ca37-90df-4d09-aecb-183a06dc0650`

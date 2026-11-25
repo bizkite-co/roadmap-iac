@@ -17,9 +17,14 @@ export class ProdCloudFrontStack extends Stack {
     const distribution = new cloudfront.Distribution(this, 'ProdDistribution', {
       comment: 'roadmappartners.net - PROD CloudFront front door for ACM migration',
       defaultBehavior: {
-        origin: new origins.HttpOrigin('ec2-184-72-30-45.us-west-1.compute.amazonaws.com', {
+        // Public traffic terminates on the production ALB. Deploying this
+        // stack must keep that origin. The ALB and its us-west-1 certificate
+        // were created outside this stack; do not point this origin back at
+        // the EC2 public DNS.
+        origin: new origins.HttpOrigin('roadmap-prod-origin-1785733092.us-west-1.elb.amazonaws.com', {
           protocolPolicy: cloudfront.OriginProtocolPolicy.HTTPS_ONLY,
           readTimeout: Duration.seconds(30),
+          keepaliveTimeout: Duration.seconds(5),
         }),
         viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
         allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,

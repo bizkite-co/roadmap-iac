@@ -17,7 +17,7 @@ export class UatCloudFrontStack extends Stack {
     const distribution = new cloudfront.Distribution(this, 'UatDistribution', {
       comment: 'uat.roadmappartners.net - UAT CloudFront front door for ACM migration',
       defaultBehavior: {
-        origin: new origins.HttpOrigin('ec2-54-177-161-104.us-west-1.compute.amazonaws.com', {
+        origin: new origins.HttpOrigin('roadmap-prod-origin-1785733092.us-west-1.elb.amazonaws.com', {
           protocolPolicy: cloudfront.OriginProtocolPolicy.HTTPS_ONLY,
           readTimeout: Duration.seconds(30),
         }),
