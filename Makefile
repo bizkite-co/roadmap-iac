@@ -52,3 +52,9 @@ list-runs: ## List the last 10 runs of the E2E test lambda
 	@LOG_GROUP_NAME="/roadmap/prod/roadmap-e2e-test-runner-log-group"; \
 	echo "Fetching recent runs from log group $${LOG_GROUP_NAME}..."; \
 	aws logs filter-log-events --log-group-name $${LOG_GROUP_NAME} --filter-pattern "START RequestId" --limit 10 --query 'events[].{Timestamp:timestamp, Message:message}' --output table
+.PHONY: notify-spend-alarm-synth notify-spend-alarm-deploy
+notify-spend-alarm-synth: ## Synthesize the PROD Notify spend alarm stack without AWS changes
+	npx cdk --app "npx ts-node bin/notify-spend-alarm.ts" synth RoadmapNotifySpendAlarmStack --output cdk.out-notify-spend
+
+notify-spend-alarm-deploy: ## Deploy the $12 Notify spend alarm through CloudFormation
+	./scripts/deploy-notify-spend-alarm.sh

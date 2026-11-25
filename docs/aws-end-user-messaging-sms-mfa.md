@@ -12,7 +12,10 @@ UAT and PROD use separate EC2 roles (`RoadmapUatInstanceRole` and `RoadmapProdIn
 
 - Notify configuration `notify-247b108582bd4b759babbf5302624959` (`Roadmap`) is `ACTIVE`, Basic tier, US SMS, managed OTP template `notify-code-verification-english-001`.
 - `RoadmapProdAwsSmsMfaStack` is `CREATE_COMPLETE`. It grants only `sms-voice:SendNotifyTextMessage`, scoped to the PROD Notify configuration ARN, on `RoadmapProdInstanceRole`.
-- The application has not yet been deployed or runtime-enabled in PROD. The email and SMS MFA schema tables have been prepared; PROD app release remains pending.
+- The application is deployed at `1.0.8.449`; SMS MFA is available as an optional method, and global enforcement remains off.
+- AWS approved the `NotifyMonthlySpend` service quota request `fb900c43d0524f00a043504d5dc8c19erOOW0MYG`. The account-enforced Notify monthly spend cap is now **$20**.
+- `RoadmapNotifySpendAlarmStack` is deployed. It alarms at **$12** (60% of the cap) on `AWS/SMSVoice:NotifyMessageMonthlySpend` and notifies the existing `site-alarm-topic`. The alarm is currently `OK`; its first observed monthly spend datapoint was about $0.11.
+- Advanced-tier request `registration-2cbdff48ed8642a7b2ce5a17628000a8` was submitted on November 24, 2026 and is `REVIEWING`; the Notify configuration reports `PENDING_UPGRADE`. The registration is limited to US destinations and projects 10 messages/day with 2 messages/second peak throughput. Its evidence attachment `attachment-c552d24742b7407b92f34ad30d6e0f8f` is an image generated from the current UAT form wording and styling; it shows the unchecked consent box, phone input, sender disclosure, and policy links without user data.
 
 ## Deploy/update the IAM policy
 
@@ -25,4 +28,6 @@ AWS_PROFILE=westmonroe-support ./scripts/deploy-sms-notify-iam.sh prod notify-<p
 
 The wrapper checks the AWS account and environment, synthesizes the selected stack, removes CDK's unused bootstrap-version parameter/rule, and deploys the IAM policy through CloudFormation.
 
-The monthly Notify spend cap remains $1; no limit increase was requested. Each delivered message incurs AWS Notify and country transport charges. Notify Basic provides an AWS-managed sender and approved OTP template; it does not replace consent or required disclosures. The separate Uptime 10DLC campaign must not be reused for MFA.
+Notify pricing starts at $0.045 per message plus the applicable country transport charge. AWS approved a $20 monthly Notify cap; the CloudWatch alarm warns at $12. Advanced review is expected to take 3–5 business days according to AWS. Notify Basic provides an AWS-managed sender and approved OTP template; it does not replace consent or required disclosures. The separate Uptime 10DLC campaign must not be reused for MFA.
+
+The PROD spend alarm is defined in `lib/notify-spend-alarm-stack.ts` and `bin/notify-spend-alarm.ts`; use `make notify-spend-alarm-deploy` or `scripts/deploy-notify-spend-alarm.sh` to deploy it. The stack is asset-free and the helper removes CDK's unused bootstrap metadata because this account is not CDK-bootstrapped.
