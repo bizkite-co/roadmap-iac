@@ -1,0 +1,189 @@
+---
+- name: Configure the isolated Spring modernization host
+  hosts: all
+  become: true
+  gather_facts: true
+
+  vars:
+    codedeploy_installer: /tmp/codedeploy-install
+    cloudwatch_package: /tmp/amazon-cloudwatch-agent.deb
+    cloudwatch_config: /etc/roadmap/spring-upgrade-cloudwatch-agent.json
+    suppress_email_send: true
+
+  pre_tasks:
+    - name: Limit this playbook to the intended Ubuntu modernization host
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.distribution == 'Ubuntu'
+          - ansible_facts.distribution_version == '24.04'
+        fail_msg: >-
+          This playbook is only for the isolated Ubuntu 24.04 spring-upgrade host.
+          Check the dynamic inventory filter before running it.
+
+  tasks:
+    - name: Install packages needed for repository setup
+      ansible.builtin.apt:
+        name:
+          - ca-certificates
+          - curl
+          - gnupg
+          - python3-debian
+        state: present
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Download the Amazon Corretto signing key
+      ansible.builtin.get_url:
+        url: https://apt.corretto.aws/corretto.key
+        dest: /tmp/corretto.key
+        mode: '0644'
+
+    - name: Install the Corretto apt signing key
+      ansible.builtin.command:
+        cmd: gpg --dearmor --yes --output /usr/share/keyrings/corretto-keyring.gpg /tmp/corretto.key
+        creates: /usr/share/keyrings/corretto-keyring.gpg
+
+    - name: Configure the Corretto apt repository
+      ansible.builtin.deb822_repository:
+        name: corretto
+        types: [deb]
+        uris: https://apt.corretto.aws
+        suites: stable
+        components: [main]
+        signed_by: /usr/share/keyrings/corretto-keyring.gpg
+        state: present
+      register: corretto_repository
+
+    - name: Refresh package metadata after adding Corretto
+      ansible.builtin.apt:
+        update_cache: true
+      when: corretto_repository is changed
+
+    - name: Install the application host runtime and database packages
+      ansible.builtin.apt:
+        name:
+          - java-17-amazon-corretto-jdk
+          - tomcat10
+          - mysql-server
+          - apache2
+          - ruby
+          - unzip
+        state: present
+
+    - name: Set a distinct application role and suppress outbound mail during host bring-up
+      ansible.builtin.copy:
+        dest: /etc/default/roadmap-spring-upgrade
+        owner: root
+        group: root
+        mode: '0600'
+        content: |
+          MACHINE_ROLE=PRS-SPRING-UPGRADE
+          JAVA_HOME=/usr/lib/jvm/java-17-amazon-corretto
+          SUPPRESS_EMAIL_SEND={{ suppress_email_send | bool | ternary("true", "false") }}
+      notify: Restart Tomcat
+
+    - name: Create the Tomcat systemd override directory
+      ansible.builtin.file:
+        path: /etc/systemd/system/tomcat10.service.d
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Ensure Tomcat loads the modernization-host environment
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/tomcat10.service.d/roadmap-spring-upgrade.conf
+        owner: root
+        group: root
+        mode: '0644'
+        content: |
+          [Service]
+          EnvironmentFile=-/etc/default/roadmap-spring-upgrade
+      notify:
+        - Reload systemd
+        - Restart Tomcat
+
+    - name: Apply Tomcat environment and systemd configuration before starting services
+      ansible.builtin.meta: flush_handlers
+
+    - name: Ensure core services are enabled and running
+      ansible.builtin.service:
+        name: '{{ item }}'
+        state: started
+        enabled: true
+      loop:
+        - mysql
+        - apache2
+        - tomcat10
+
+    - name: Verify Tomcat is active
+      ansible.builtin.command:
+        cmd: systemctl is-active --quiet tomcat10
+      changed_when: false
+
+    - name: Download the regional CodeDeploy installer
+      ansible.builtin.get_url:
+        url: https://aws-codedeploy-us-west-1.s3.us-west-1.amazonaws.com/latest/install
+        dest: '{{ codedeploy_installer }}'
+        mode: '0755'
+
+    - name: Install the CodeDeploy agent if missing
+      ansible.builtin.command:
+        cmd: '{{ codedeploy_installer }} auto'
+        creates: /opt/codedeploy-agent/bin/codedeploy-agent
+
+    - name: Download the CloudWatch agent package
+      ansible.builtin.get_url:
+        url: https://amazoncloudwatch-agent.s3.amazonaws.com/ubuntu/amd64/latest/amazon-cloudwatch-agent.deb
+        dest: '{{ cloudwatch_package }}'
+        mode: '0644'
+
+    - name: Install the CloudWatch agent
+      ansible.builtin.apt:
+        deb: '{{ cloudwatch_package }}'
+        state: present
+
+    - name: Create the Roadmap configuration directory
+      ansible.builtin.file:
+        path: /etc/roadmap
+        state: directory
+        owner: root
+        group: root
+        mode: '0755'
+
+    - name: Install CloudWatch log collection configuration
+      ansible.builtin.copy:
+        src: spring-upgrade-cloudwatch-agent.json
+        dest: '{{ cloudwatch_config }}'
+        owner: root
+        group: root
+        mode: '0644'
+      notify: Apply CloudWatch configuration
+
+    - name: Ensure CodeDeploy agent is enabled and running
+      ansible.builtin.service:
+        name: codedeploy-agent
+        state: started
+        enabled: true
+
+    - name: Ensure CloudWatch agent is enabled and running
+      ansible.builtin.service:
+        name: amazon-cloudwatch-agent
+        state: started
+        enabled: true
+
+  handlers:
+    - name: Reload systemd
+      ansible.builtin.systemd:
+        daemon_reload: true
+
+    - name: Restart Tomcat
+      ansible.builtin.service:
+        name: tomcat10
+        state: restarted
+
+    - name: Apply CloudWatch configuration
+      ansible.builtin.command:
+        cmd: >-
+          /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl
+          -a fetch-config -m ec2 -s -c file:{{ cloudwatch_config }}

@@ -1,0 +1,32 @@
+{
+  "agent": {
+    "metrics_collection_interval": 60,
+    "run_as_user": "root"
+  },
+  "logs": {
+    "logs_collected": {
+      "files": {
+        "collect_list": [
+          {
+            "file_path": "/var/log/tomcat10/*.log",
+            "log_group_name": "/roadmap/spring-upgrade/tomcat",
+            "log_stream_name": "{instance_id}-tomcat",
+            "timezone": "UTC"
+          },
+          {
+            "file_path": "/var/log/apache2/access.log",
+            "log_group_name": "/roadmap/spring-upgrade/apache-access",
+            "log_stream_name": "{instance_id}-apache-access",
+            "timezone": "UTC"
+          },
+          {
+            "file_path": "/var/log/apache2/error.log",
+            "log_group_name": "/roadmap/spring-upgrade/apache-error",
+            "log_stream_name": "{instance_id}-apache-error",
+            "timezone": "UTC"
+          }
+        ]
+      }
+    }
+  }
+}
