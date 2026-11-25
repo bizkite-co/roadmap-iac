@@ -4,8 +4,12 @@ import * as actions from 'aws-cdk-lib/aws-cloudwatch-actions';
 import * as sns from 'aws-cdk-lib/aws-sns';
 import { Construct } from 'constructs';
 
+export interface NotifySpendAlarmStackProps extends StackProps {
+  notifySpendThreshold: number;
+}
+
 export class NotifySpendAlarmStack extends Stack {
-  constructor(scope: Construct, id: string, props?: StackProps) {
+  constructor(scope: Construct, id: string, props: NotifySpendAlarmStackProps) {
     super(scope, id, props);
 
     const notificationTopic = sns.Topic.fromTopicArn(
@@ -21,9 +25,9 @@ export class NotifySpendAlarmStack extends Stack {
     });
     const alarm = new cloudwatch.Alarm(this, 'NotifyMonthlySpend60PercentAlarm', {
       alarmName: 'RoadmapNotifyMonthlySpend60PercentAlarm',
-      alarmDescription: 'Roadmap PROD Notify spend reached 60% of the $20 monthly Notify cap ($12).',
+      alarmDescription: 'Roadmap PROD Notify spend reached 60% of the current enforced account cap.',
       metric: notifyMonthlySpend,
-      threshold: 12,
+      threshold: props.notifySpendThreshold,
       evaluationPeriods: 1,
       datapointsToAlarm: 1,
       comparisonOperator: cloudwatch.ComparisonOperator.GREATER_THAN_OR_EQUAL_TO_THRESHOLD,

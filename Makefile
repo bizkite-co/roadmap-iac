@@ -54,7 +54,7 @@ list-runs: ## List the last 10 runs of the E2E test lambda
 	aws logs filter-log-events --log-group-name $${LOG_GROUP_NAME} --filter-pattern "START RequestId" --limit 10 --query 'events[].{Timestamp:timestamp, Message:message}' --output table
 .PHONY: notify-spend-alarm-synth notify-spend-alarm-deploy
 notify-spend-alarm-synth: ## Synthesize the PROD Notify spend alarm stack without AWS changes
-	npx cdk --app "npx ts-node bin/notify-spend-alarm.ts" synth RoadmapNotifySpendAlarmStack --output cdk.out-notify-spend
+	./scripts/deploy-notify-spend-alarm.sh --synth-only
 
-notify-spend-alarm-deploy: ## Deploy the $12 Notify spend alarm through CloudFormation
+notify-spend-alarm-deploy: ## Deploy the 60% Notify spend alarm after calculating from the enforced cap
 	./scripts/deploy-notify-spend-alarm.sh
