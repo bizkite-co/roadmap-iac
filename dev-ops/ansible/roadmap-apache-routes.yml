@@ -1,0 +1,31 @@
+---
+- name: Manage the Roadmap Apache route policy
+  hosts: all
+  become: true
+  gather_facts: false
+
+  vars:
+    roadmap_expected_hosts:
+      uat: ubuntu@54.177.161.104
+      prod: ubuntu@184.72.30.45
+    roadmap_apache_mode: prepare
+
+  pre_tasks:
+    - name: Require a single explicitly selected Roadmap host
+      ansible.builtin.assert:
+        that:
+          - roadmap_environment in ['uat', 'prod']
+          - roadmap_apache_mode in ['prepare', 'verify']
+          - ansible_play_hosts_all | length == 1
+          - inventory_hostname == roadmap_expected_hosts[roadmap_environment]
+        fail_msg: >-
+          Select exactly the expected UAT or PROD host and provide
+          roadmap_environment=uat|prod before managing Apache.
+
+  tasks:
+    - name: Converge and validate the Apache route allowlists
+      ansible.builtin.script:
+        cmd: "{{ playbook_dir }}/normalize-apache-routes.py {{ roadmap_environment }} {{ roadmap_apache_mode }}"
+        executable: /usr/bin/python3
+      register: apache_route_result
+      changed_when: "'changed 0 vhost file(s)' not in apache_route_result.stdout"
