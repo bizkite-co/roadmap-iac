@@ -34,3 +34,19 @@ The website repository's `make deploy-uat` and `make deploy-prod` now apply this
 policy before deploying the WAR, so new controller routes cannot be deployed
 without reconciling Apache first. Set `ROADMAP_IAC_DIR` if the repositories are
 not sibling directories.
+
+## Manage Tomcat idle session timeout
+
+PROD's effective Tomcat default was 30 minutes in
+`/opt/tomcat/latest/conf/web.xml`. The policy is recorded in
+`roadmap-session-timeout.yml`; it keeps the inactivity timeout at 30 minutes
+and restarts Tomcat only if the value changes. Website deployment targets
+reconcile this setting before deploying the WAR.
+
+```sh
+make -f dev-ops/ansible/tomcat-session-timeout.mk tomcat-session-timeout-prepare ENV=uat
+make -f dev-ops/ansible/tomcat-session-timeout.mk tomcat-session-timeout-verify ENV=uat
+make -f dev-ops/ansible/tomcat-session-timeout.mk tomcat-session-timeout-verify ENV=prod
+```
+
+The PROD prepare target additionally requires `CONFIRM_PROD=1`.
