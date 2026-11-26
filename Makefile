@@ -122,8 +122,8 @@ SPRING_UPGRADE_ANSIBLE_LOCAL_TEMP := /tmp/roadmap-iac-ansible-local-temp
 spring-upgrade-build: ## Compile the isolated Spring modernization CDK app into /tmp
 	./node_modules/.bin/tsc --target ES2020 --module commonjs --esModuleInterop --skipLibCheck --outDir $(SPRING_UPGRADE_BUILD) lib/spring-modernization-host-stack.ts bin/spring-modernization-host.ts
 
-spring-upgrade-synth: spring-upgrade-build ## Synthesize the isolated Spring modernization host (no AWS changes)
-	AWS_PROFILE=$(AWS_PROFILE) AWS_REGION=$(AWS_REGION) cdk synth -a '$(SPRING_UPGRADE_APP)' $(SPRING_UPGRADE_STACK) --output /tmp/roadmap-iac-spring-upgrade-cdk.out
+spring-upgrade-synth: spring-upgrade-build ## Synthesize the isolated Spring modernization host without AWS credentials or changes
+	AWS_ACCESS_KEY_ID=synth-only AWS_SECRET_ACCESS_KEY=synth-only AWS_REGION=$(AWS_REGION) cdk synth -a '$(SPRING_UPGRADE_APP)' $(SPRING_UPGRADE_STACK) --output /tmp/roadmap-iac-spring-upgrade-cdk.out
 
 spring-upgrade-deploy: spring-upgrade-build ## Create the isolated Spring modernization host (starts recurring AWS charges)
 	AWS_PROFILE=$(AWS_PROFILE) AWS_REGION=$(AWS_REGION) cdk deploy -a '$(SPRING_UPGRADE_APP)' $(SPRING_UPGRADE_STACK) --require-approval $(SPRING_UPGRADE_REQUIRE_APPROVAL)

@@ -8,6 +8,11 @@
     codedeploy_installer: /tmp/codedeploy-install
     cloudwatch_package: /tmp/amazon-cloudwatch-agent.deb
     cloudwatch_config: /etc/roadmap/spring-upgrade-cloudwatch-agent.json
+    tomcat_version: 11.0.29
+    tomcat_archive: /tmp/apache-tomcat-{{ tomcat_version }}.tar.gz
+    tomcat_root: /opt/tomcat
+    tomcat_home: /opt/tomcat/apache-tomcat-{{ tomcat_version }}
+    tomcat_checksum: be277ce58876a584653f980fd695c82e6708029f05fc7ad9fcfbdcede3836ae6ffa4f858eac26de6ff938f130f31158be8a54b5f546393ea1ad5da0cd202873c
     suppress_email_send: true
 
   pre_tasks:
@@ -63,12 +68,59 @@
       ansible.builtin.apt:
         name:
           - java-17-amazon-corretto-jdk
-          - tomcat10
           - mysql-server
           - apache2
           - ruby
           - unzip
         state: present
+
+    - name: Create the Tomcat service account
+      ansible.builtin.user:
+        name: tomcat
+        system: true
+        home: '{{ tomcat_root }}'
+        shell: /usr/sbin/nologin
+        create_home: false
+
+    - name: Create the Tomcat installation root
+      ansible.builtin.file:
+        path: '{{ tomcat_root }}'
+        state: directory
+        owner: root
+        group: tomcat
+        mode: '0750'
+
+    - name: Download the pinned Apache Tomcat archive
+      ansible.builtin.get_url:
+        url: https://archive.apache.org/dist/tomcat/tomcat-11/v{{ tomcat_version }}/bin/apache-tomcat-{{ tomcat_version }}.tar.gz
+        dest: '{{ tomcat_archive }}'
+        checksum: sha512:{{ tomcat_checksum }}
+        owner: root
+        group: root
+        mode: '0644'
+
+    - name: Extract the pinned Apache Tomcat release
+      ansible.builtin.unarchive:
+        src: '{{ tomcat_archive }}'
+        dest: '{{ tomcat_root }}'
+        remote_src: true
+        creates: '{{ tomcat_home }}/RELEASE-NOTES'
+
+    - name: Set Tomcat installation ownership
+      ansible.builtin.file:
+        path: '{{ tomcat_home }}'
+        state: directory
+        owner: tomcat
+        group: tomcat
+        recurse: true
+
+    - name: Point the stable Tomcat path at the pinned release
+      ansible.builtin.file:
+        src: '{{ tomcat_home }}'
+        dest: '{{ tomcat_root }}/latest'
+        state: link
+        owner: tomcat
+        group: tomcat
 
     - name: Set a distinct application role and suppress outbound mail during host bring-up
       ansible.builtin.copy:
@@ -82,23 +134,36 @@
           SUPPRESS_EMAIL_SEND={{ suppress_email_send | bool | ternary("true", "false") }}
       notify: Restart Tomcat
 
-    - name: Create the Tomcat systemd override directory
-      ansible.builtin.file:
-        path: /etc/systemd/system/tomcat10.service.d
-        state: directory
-        owner: root
-        group: root
-        mode: '0755'
-
-    - name: Ensure Tomcat loads the modernization-host environment
+    - name: Install the isolated Tomcat systemd service
       ansible.builtin.copy:
-        dest: /etc/systemd/system/tomcat10.service.d/roadmap-spring-upgrade.conf
+        dest: /etc/systemd/system/tomcat.service
         owner: root
         group: root
         mode: '0644'
         content: |
+          [Unit]
+          Description=Apache Tomcat {{ tomcat_version }} for Roadmap Spring modernization
+          After=network.target
+
           [Service]
-          EnvironmentFile=-/etc/default/roadmap-spring-upgrade
+          Type=forking
+          User=tomcat
+          Group=tomcat
+          EnvironmentFile=/etc/default/roadmap-spring-upgrade
+          Environment=CATALINA_HOME={{ tomcat_root }}/latest
+          Environment=CATALINA_BASE={{ tomcat_root }}/latest
+          Environment=CATALINA_PID={{ tomcat_root }}/latest/temp/tomcat.pid
+          Environment="JAVA_OPTS=-Djava.security.egd=file:///dev/urandom -Djava.awt.headless=true"
+          Environment="CATALINA_OPTS=-Xms512M -Xmx1024M -server -XX:+UseParallelGC"
+          ExecStart={{ tomcat_root }}/latest/bin/startup.sh
+          ExecStop={{ tomcat_root }}/latest/bin/shutdown.sh
+          SuccessExitStatus=143
+          Restart=on-failure
+          RestartSec=5
+          UMask=0027
+
+          [Install]
+          WantedBy=multi-user.target
       notify:
         - Reload systemd
         - Restart Tomcat
@@ -114,11 +179,11 @@
       loop:
         - mysql
         - apache2
-        - tomcat10
+        - tomcat
 
     - name: Verify Tomcat is active
       ansible.builtin.command:
-        cmd: systemctl is-active --quiet tomcat10
+        cmd: systemctl is-active --quiet tomcat
       changed_when: false
 
     - name: Download the regional CodeDeploy installer
@@ -179,7 +244,7 @@
 
     - name: Restart Tomcat
       ansible.builtin.service:
-        name: tomcat10
+        name: tomcat
         state: restarted
 
     - name: Apply CloudWatch configuration

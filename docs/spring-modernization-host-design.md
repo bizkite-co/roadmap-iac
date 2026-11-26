@@ -1,6 +1,6 @@
 # Spring modernization host design
 
-Status: implementation in progress; no AWS resources have been deployed. This stack does not change the existing UAT/PROD pipeline.
+Status: isolated host IaC was deployed, converged, and then destroyed on 2026-11-21. The current branch updates its baseline to Tomcat 11; no Spring modernization host is presently running. This stack does not change the existing UAT/PROD pipeline.
 
 ## Goal
 
@@ -17,9 +17,9 @@ Create a separate, reproducible host for the Spring and passkey modernization wo
 
 ## Runtime compatibility
 
-The app currently targets Java 17 and is a WAR using Spring Framework 4.2.6, Spring Security 3.2.10, `javax.servlet`, Thymeleaf Spring 4, Spring Data JPA 1.6.6, and Hibernate 4.3.1. Those APIs do not constitute the modern Spring baseline.
+The application branch targets Java 17 and a traditional WAR using Spring Framework 7.1, Spring Security 7.2, Spring Data JPA 4.2, Hibernate 7.4, Jakarta Servlet 6.1, and Thymeleaf 3.1. Current UAT and PROD remain on the known-good existing runtime.
 
-Apache Tomcat 9 is the compatibility bridge for the current WAR, but upstream support ends on 2027-03-31. Treat it as a temporary validation runtime, not the modernization host's long-term target. The target stack should validate the upgraded app on Java 17 and Tomcat 10.1 (Jakarta Servlet). Keep the current WAR and target runtime isolated during the transition; do not silently point the existing deployment scripts at the new host.
+The modernization host must use Apache Tomcat 11.0.x for Servlet 6.1. The current IaC baseline pins Tomcat 11.0.29 and verifies the official archive's SHA-512 digest. Install it at `/opt/tomcat/apache-tomcat-<version>` and keep `/opt/tomcat/latest` as the stable deploy path used by the Roadmap WAR's existing Makefile deployment workflow. Keep current UAT/PROD untouched during the transition.
 
 Ubuntu 24.04 is selected because the current hosts already run Ubuntu and the official repositories provide MySQL 8.0. The live hosts have MySQL 8.0.42; Ubuntu 24.04 currently offers the patched 8.0.46 package. AWS lists Ubuntu Server 24.04 as tested with CodeDeploy agent 2.0.x and later.
 
@@ -34,7 +34,7 @@ Ubuntu 24.04 is selected because the current hosts already run Ubuntu and the of
 
 ## Validation gate before Spring changes
 
-Deploy the current WAR only if it can run on the temporary compatibility runtime. Then verify database connectivity, SES sending, S3 report storage, scheduled jobs, TLS/routing, CloudWatch logs, health checks, and rollback. Validate the upgraded WAR separately on Tomcat 10.1 before any production cutover.
+Deploy the upgraded WAR only after the isolated host is configured. Then verify database connectivity, SES sending (suppressed by default), S3 report storage, scheduled jobs, TLS/routing, CloudWatch logs, health checks, and rollback on Tomcat 11 before any UAT or production cutover.
 
 ## Evidence and constraints
 
@@ -43,4 +43,5 @@ Deploy the current WAR only if it can run on the temporary compatibility runtime
 - AWS CodeDeploy lists Ubuntu Server 24.04 as tested for agent 2.0.x and later: https://docs.aws.amazon.com/codedeploy/latest/userguide/codedeploy-agent.html
 - Canonical public Ubuntu 24.04 AMI metadata was resolved in `us-west-1`: the root device is `/dev/sda1`.
 - [Ubuntu 24.04 MySQL Server package](https://packages.ubuntu.com/noble/mysql-server) currently provides MySQL 8.0.46.
-- Apache announced Tomcat 9.0.x end of support as 2027-03-31; current Tomcat 9.x and 10.1.x releases are documented at https://tomcat.apache.org/
+- [Tomcat 11 migration guide](https://tomcat.apache.org/migration-11.0.html) — Java 17 minimum and Servlet 6.1 support.
+- [Tomcat 11 version matrix](https://tomcat.apache.org/whichversion) — current supported release branch and specification level.
