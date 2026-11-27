@@ -92,7 +92,7 @@
 
     - name: Download the pinned Apache Tomcat archive
       ansible.builtin.get_url:
-        url: https://archive.apache.org/dist/tomcat/tomcat-11/v{{ tomcat_version }}/bin/apache-tomcat-{{ tomcat_version }}.tar.gz
+        url: https://dlcdn.apache.org/tomcat/tomcat-11/v{{ tomcat_version }}/bin/apache-tomcat-{{ tomcat_version }}.tar.gz
         dest: '{{ tomcat_archive }}'
         checksum: sha512:{{ tomcat_checksum }}
         owner: root

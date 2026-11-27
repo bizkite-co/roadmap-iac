@@ -6,8 +6,6 @@ import * as iam from 'aws-cdk-lib/aws-iam';
 import * as logs from 'aws-cdk-lib/aws-logs';
 import * as s3 from 'aws-cdk-lib/aws-s3';
 
-const VPC_ID = 'vpc-45b01b23';
-const SUBNET_ID = 'subnet-47a6101d';
 const NAME_TAG = 'PRS-SPRING-UPGRADE';
 
 /**
@@ -19,12 +17,7 @@ export class SpringModernizationHostStack extends Stack {
   constructor(scope: Construct, id: string, props?: StackProps) {
     super(scope, id, props);
 
-    const vpc = ec2.Vpc.fromVpcAttributes(this, 'ExistingVpc', {
-      vpcId: VPC_ID,
-      availabilityZones: ['us-west-1c'],
-      publicSubnetIds: [SUBNET_ID],
-      publicSubnetRouteTableIds: ['rtb-d65d7bb0'],
-    });
+    const vpc = ec2.Vpc.fromLookup(this, 'DefaultVpc', { isDefault: true });
     const publicSubnets = vpc.selectSubnets({ subnetType: ec2.SubnetType.PUBLIC });
 
     const securityGroup = new ec2.SecurityGroup(this, 'HostSecurityGroup', {
@@ -41,27 +34,6 @@ export class SpringModernizationHostStack extends Stack {
         iam.ManagedPolicy.fromAwsManagedPolicyName('CloudWatchAgentServerPolicy'),
       ],
     });
-    role.addToPolicy(new iam.PolicyStatement({
-      actions: ['s3:PutObject'],
-      resources: ['arn:aws:s3:::prsreports/calculation-records/PRS-SPRING-UPGRADE/*'],
-    }));
-    role.addToPolicy(new iam.PolicyStatement({
-      actions: ['ses:SendEmail'],
-      resources: ['*'],
-      conditions: { StringLike: { 'ses:FromAddress': '*@retirementtaxanalyzer.com' } },
-    }));
-    // Account-level Session Manager preferences write encrypted session logs
-    // to this prefix. The agent must inspect bucket encryption before opening
-    // a session, even though Ansible file transfer uses its dedicated bucket.
-    role.addToPolicy(new iam.PolicyStatement({
-      actions: ['s3:GetEncryptionConfiguration'],
-      resources: ['arn:aws:s3:::prs-devops-artifacts'],
-    }));
-    role.addToPolicy(new iam.PolicyStatement({
-      actions: ['s3:PutObject'],
-      resources: ['arn:aws:s3:::prs-devops-artifacts/secure-session-log/*'],
-    }));
-
     // The Ansible SSM connection plugin stages temporary file transfers here.
     // The bucket is private, encrypted, short-lived, and removed with this stack.
     const ansibleTransferBucket = new s3.Bucket(this, 'AnsibleTransferBucket', {
@@ -69,16 +41,15 @@ export class SpringModernizationHostStack extends Stack {
       encryption: s3.BucketEncryption.S3_MANAGED,
       enforceSSL: true,
       lifecycleRules: [{ expiration: Duration.days(7) }],
-      autoDeleteObjects: true,
       removalPolicy: RemovalPolicy.DESTROY,
     });
 
     ansibleTransferBucket.grantRead(role);
 
-    const application = codedeploy.ServerApplication.fromServerApplicationName(
+    const application = new codedeploy.ServerApplication(
       this,
       'RoadmapWebApp',
-      'RoadmapWebApp',
+      { applicationName: 'RoadmapWebApp' },
     );
     new codedeploy.ServerDeploymentGroup(this, 'SpringUpgradeDeploymentGroup', {
       application,

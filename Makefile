@@ -122,11 +122,11 @@ SPRING_UPGRADE_ANSIBLE_LOCAL_TEMP := /tmp/roadmap-iac-ansible-local-temp
 spring-upgrade-build: ## Compile the isolated Spring modernization CDK app into /tmp
 	./node_modules/.bin/tsc --target ES2020 --module commonjs --esModuleInterop --skipLibCheck --outDir $(SPRING_UPGRADE_BUILD) lib/spring-modernization-host-stack.ts bin/spring-modernization-host.ts
 
-spring-upgrade-synth: spring-upgrade-build ## Synthesize the isolated Spring modernization host without AWS credentials or changes
-	AWS_ACCESS_KEY_ID=synth-only AWS_SECRET_ACCESS_KEY=synth-only AWS_REGION=$(AWS_REGION) cdk synth -a '$(SPRING_UPGRADE_APP)' $(SPRING_UPGRADE_STACK) --output /tmp/roadmap-iac-spring-upgrade-cdk.out
+spring-upgrade-synth: spring-upgrade-build ## Synthesize the isolated Spring modernization host (reads the UAT account's default VPC)
+	AWS_REGION=$(AWS_REGION) cdk synth -a '$(SPRING_UPGRADE_APP)' $(SPRING_UPGRADE_STACK) --output /tmp/roadmap-iac-spring-upgrade-cdk.out
 
-spring-upgrade-deploy: spring-upgrade-build ## Create the isolated Spring modernization host (starts recurring AWS charges)
-	AWS_PROFILE=$(AWS_PROFILE) AWS_REGION=$(AWS_REGION) cdk deploy -a '$(SPRING_UPGRADE_APP)' $(SPRING_UPGRADE_STACK) --require-approval $(SPRING_UPGRADE_REQUIRE_APPROVAL)
+spring-upgrade-deploy: spring-upgrade-synth ## Create the isolated Spring modernization host (starts recurring AWS charges)
+	AWS_REGION=$(AWS_REGION) ./scripts/deploy-spring-upgrade-host.sh /tmp/roadmap-iac-spring-upgrade-cdk.out/$(SPRING_UPGRADE_STACK).template.json
 
 spring-upgrade-ansible-install: ## Install the locked Ansible controller environment and AWS collection
 	UV_CACHE_DIR=$(SPRING_UPGRADE_ANSIBLE_CACHE) UV_PROJECT_ENVIRONMENT=$(SPRING_UPGRADE_ANSIBLE_ENV) uv sync --project dev-ops/ansible --locked
@@ -134,14 +134,14 @@ spring-upgrade-ansible-install: ## Install the locked Ansible controller environ
 
 spring-upgrade-configure: spring-upgrade-ansible-install ## Apply the idempotent Ansible baseline over SSM to PRS-SPRING-UPGRADE
 	@command -v session-manager-plugin >/dev/null || { echo "Install the AWS Session Manager plugin before configuring the host." >&2; exit 1; }
-	@bucket=$$(AWS_PROFILE=$(AWS_PROFILE) AWS_REGION=$(AWS_REGION) aws cloudformation describe-stacks --stack-name $(SPRING_UPGRADE_STACK) --query "Stacks[0].Outputs[?OutputKey=='AnsibleTransferBucketName'].OutputValue | [0]" --output text); \
+	@bucket=$$(AWS_REGION=$(AWS_REGION) aws cloudformation describe-stacks --stack-name $(SPRING_UPGRADE_STACK) --query "Stacks[0].Outputs[?OutputKey=='AnsibleTransferBucketName'].OutputValue | [0]" --output text); \
 	  test -n "$$bucket" -a "$$bucket" != "None" || { echo 'Deploy the host stack first.' >&2; exit 1; }; \
-	  inventory=$$(UV_CACHE_DIR=$(SPRING_UPGRADE_ANSIBLE_CACHE) UV_PROJECT_ENVIRONMENT=$(SPRING_UPGRADE_ANSIBLE_ENV) ANSIBLE_COLLECTIONS_PATH=$(SPRING_UPGRADE_ANSIBLE_COLLECTIONS) AWS_DEFAULT_REGION=$(AWS_REGION) env -u AWS_PROFILE uv run --project dev-ops/ansible --locked ansible-inventory -i dev-ops/ansible/spring-upgrade.aws_ec2.yml --list) || exit; \
+	  inventory=$$(UV_CACHE_DIR=$(SPRING_UPGRADE_ANSIBLE_CACHE) UV_PROJECT_ENVIRONMENT=$(SPRING_UPGRADE_ANSIBLE_ENV) ANSIBLE_COLLECTIONS_PATH=$(SPRING_UPGRADE_ANSIBLE_COLLECTIONS) AWS_DEFAULT_REGION=$(AWS_REGION) uv run --project dev-ops/ansible --locked ansible-inventory -i dev-ops/ansible/spring-upgrade.aws_ec2.yml --list) || exit; \
 	  printf '%s' "$$inventory" | python3 -c 'import json,sys; data=json.load(sys.stdin); hosts=data.get("aws_ec2",{}).get("hosts",[]); sys.exit(0 if hosts else 1)' || { echo 'No running PRS-SPRING-UPGRADE instance is present in the AWS inventory.' >&2; exit 1; }; \
-	  UV_CACHE_DIR=$(SPRING_UPGRADE_ANSIBLE_CACHE) UV_PROJECT_ENVIRONMENT=$(SPRING_UPGRADE_ANSIBLE_ENV) ANSIBLE_COLLECTIONS_PATH=$(SPRING_UPGRADE_ANSIBLE_COLLECTIONS) ANSIBLE_LOCAL_TEMP=$(SPRING_UPGRADE_ANSIBLE_LOCAL_TEMP) AWS_DEFAULT_REGION=$(AWS_REGION) ANSIBLE_INVENTORY_UNPARSED_IS_FAILED=true env -u AWS_PROFILE uv run --project dev-ops/ansible --locked ansible-playbook -i dev-ops/ansible/spring-upgrade.aws_ec2.yml dev-ops/ansible/spring-upgrade-playbook.yml -e "ansible_aws_ssm_bucket_name=$$bucket" -e "suppress_email_send=$(SPRING_UPGRADE_SUPPRESS_EMAIL_SEND)"
+	  UV_CACHE_DIR=$(SPRING_UPGRADE_ANSIBLE_CACHE) UV_PROJECT_ENVIRONMENT=$(SPRING_UPGRADE_ANSIBLE_ENV) ANSIBLE_COLLECTIONS_PATH=$(SPRING_UPGRADE_ANSIBLE_COLLECTIONS) ANSIBLE_LOCAL_TEMP=$(SPRING_UPGRADE_ANSIBLE_LOCAL_TEMP) AWS_DEFAULT_REGION=$(AWS_REGION) ANSIBLE_INVENTORY_UNPARSED_IS_FAILED=true uv run --project dev-ops/ansible --locked ansible-playbook -i dev-ops/ansible/spring-upgrade.aws_ec2.yml dev-ops/ansible/spring-upgrade-playbook.yml -e "ansible_aws_ssm_bucket_name=$$bucket" -e "suppress_email_send=$(SPRING_UPGRADE_SUPPRESS_EMAIL_SEND)"
 
 spring-upgrade-destroy: spring-upgrade-build ## Destroy the isolated host stack and its temporary Ansible transfer bucket
-	AWS_PROFILE=$(AWS_PROFILE) AWS_REGION=$(AWS_REGION) cdk destroy -a '$(SPRING_UPGRADE_APP)' $(SPRING_UPGRADE_STACK)
+	AWS_REGION=$(AWS_REGION) cdk destroy -a '$(SPRING_UPGRADE_APP)' $(SPRING_UPGRADE_STACK)
 
 .PHONY: notify-spend-alarm-synth notify-spend-alarm-deploy
 notify-spend-alarm-synth: ## Synthesize the PROD Notify spend alarm stack without AWS changes

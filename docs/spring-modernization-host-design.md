@@ -1,6 +1,10 @@
 # Spring modernization host design
 
-Status: isolated host IaC was deployed, converged, and then destroyed on 2026-11-21. The current branch updates its baseline to Tomcat 11; no Spring modernization host is presently running. This stack does not change the existing UAT/PROD pipeline.
+Status (2026-11-27): AWS Organizations OU `UAT` (`ou-qhuj-c6th6s4k`) contains member account `Roadmap UAT` (`678086717998`). `RoadmapSpringModernizationHostStack` now runs there in `us-west-1` as instance `i-08c7938310f2563ec`. Ubuntu 24.04, Tomcat 11.0.29, Java 17, MySQL 8.0.46, Apache, CodeDeploy, and CloudWatch Agent are configured. The local `prs_dev` database contains only the checked-in test schema; no customer data was copied. UAT and PROD websites were not changed.
+
+The host stack and WAR are deployed in the new member account. Flyway completes, and the public `/roadmap/about.html` route returns HTTP 200. The unauthenticated `/roadmap/login.html` route currently returns a 302 back to itself; investigate and fix this Spring Security/login behavior before treating the upgraded app as usable. The CodeDeploy health hook now probes the public About page instead of assuming the login route returns HTTP 200.
+
+Local UAT credentials are stored in the ignored, mode-600 `roadmap-website/uat.env` file. `direnv` loads them only on the `uat`, `spring-modernization`, or `spring-upgrade` branch in the website repo. The credentials belong to the account-local `roadmap-uat-developer` IAM user; they are not a profile scoped to an OU.
 
 ## Goal
 
@@ -8,12 +12,12 @@ Create a separate, reproducible host for the Spring and passkey modernization wo
 
 ## Capacity and placement
 
-- Region: `us-west-1`, matching the current environments.
+- AWS placement: member account `678086717998` in the `UAT` OU; region `us-west-1`, matching the current environments.
 - EC2 size: `m7i.large` (2 vCPU, 8 GiB).
 - Expected on-demand Linux compute price at the 2026-11-20 AWS Price List query: about $85.85 per 730-hour month, before EBS, network, public IPv4, and logging. This is about $0.44/month more than the current `m4.large` compute rate.
 - Name tag: `PRS-SPRING-UPGRADE`.
 - Proposed isolated hostname: `spring-upgrade.roadmappartners.net`; do not create DNS or route traffic as part of initial host provisioning.
-- Use Canonical Ubuntu Server 24.04 LTS selected through its public SSM AMI parameter, encrypted EBS, SSM access, and no SSH ingress. Attach only the existing network placement required for this isolated host.
+- Use Canonical Ubuntu Server 24.04 LTS selected through its public SSM AMI parameter, encrypted EBS, SSM access, and no SSH ingress. The stack uses the account's default VPC and public subnet for outbound access; its security group has no inbound rules.
 
 ## Runtime compatibility
 
@@ -25,16 +29,16 @@ Ubuntu 24.04 is selected because the current hosts already run Ubuntu and the of
 
 ## Deployment and operations
 
-- Add a separate CDK app/stack entry point in this repository; leave the default `cdk.json` app and existing E2E stack alone.
-- Provide explicit synth, deploy, status, and destroy Make targets for the named modernization stack. Deploy/destroy commands must use the selected AWS profile and `us-west-1` explicitly.
+- Add a separate CDK app/stack entry point in this repository; leave the default `cdk.json` app and existing E2E stack alone. The modernization stack creates its CodeDeploy application and deployment group in the UAT member account.
+- Provide explicit synth, deploy, status, and destroy Make targets for the named modernization stack. Deploy/destroy commands use the account credentials loaded from `uat.env` and `us-west-1` explicitly.
 - Target only the `PRS-SPRING-UPGRADE` instance from CodeDeploy. Do not broaden the current `PRS-UAT` or `PRS-PROD` deployment groups or pipeline stages.
 - Keep secrets out of AMIs, user data, and source. Resolve runtime settings through the documented Secrets Manager / IAM role path once the app's exact secret contract has been inventoried.
 - Bootstrap logs and application logs to CloudWatch; retain an operator-controlled rollback to the current WAR/runtime and an explicit cleanup path for the temporary host.
-- Do not deploy the application until the database restore source, secrets, and SES/S3/IAM requirements are confirmed. The host stack itself is isolated and has no inbound rules or DNS.
+- Do not connect this host to production data or enable SES. The instance role now has no SES send permission and no write access to the shared `prsreports` bucket. Keep the local test DB and email suppression for modernization tests. The host has no inbound rules or DNS.
 
 ## Validation gate before Spring changes
 
-Deploy the upgraded WAR only after the isolated host is configured. Then verify database connectivity, SES sending (suppressed by default), S3 report storage, scheduled jobs, TLS/routing, CloudWatch logs, health checks, and rollback on Tomcat 11 before any UAT or production cutover.
+The first WAR deployment identified a missing `org.flywaydb:flyway-mysql` module at runtime; that dependency is now present. The empty test schema also had invalid zero-date defaults for `Trial_End` and `Last_Login`; the fixture now matches the values from the existing cleanup migration. Spring Data then attempted to instantiate the generic `LegacyJpaRepository<T, ID>` as a concrete repository; the interface is now marked `@NoRepositoryBean`. These changes allowed Flyway to complete and the public About route to return 200. The remaining login redirect loop must be fixed and verified before considering the modernization host ready. Then validate login, runtime compatibility, CloudWatch logs, health checks, and rollback before any UAT website or production cutover.
 
 ## Evidence and constraints
 

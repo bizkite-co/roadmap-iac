@@ -10,6 +10,7 @@ cdk.out
 stack.config.json
 config.toml
 *.key
+.direnv/
 
 # test artifacts
 test-results/
